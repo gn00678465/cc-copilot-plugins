@@ -4,8 +4,8 @@
 		"SessionStart": [
 			{
 				"type": "command",
-				"command": "node ./scripts/session-banner.cjs",
-				"cwd": "hooks"
+				"command": "node ./hooks/scripts/session-banner.cjs",
+				"windows": "node ./hooks/scripts/session-banner.cjs"
 			}
 		]
 	}

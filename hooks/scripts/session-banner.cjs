@@ -5,11 +5,18 @@ const projectDir = process.cwd();
 const pm = getPackageManager(projectDir);
 const projectInfo = detectProjectType(projectDir);
 
-console.log(`----------------------------------------\n`);
-console.log(`Package Manager: ${pm.name} (Source: ${pm.source})`);
-console.log(`Languages:       ${projectInfo.languages.join(', ') || 'unknown'}`);
-console.log(`Frameworks:      ${projectInfo.frameworks.join(', ') || 'none'}`);
-console.log(`Directory:       ${projectDir}`);
-console.log(`----------------------------------------\n`);
+const additionalContext = [
+    `Package Manager: ${pm.name} (Source: ${pm.source})`,
+    `Languages: ${projectInfo.languages.join(', ') || 'unknown'}`,
+    `Frameworks: ${projectInfo.frameworks.join(', ') || 'none'}`,
+    `Directory: ${projectDir}`
+]
+
+console.log(JSON.stringify({
+    "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": additionalContext.join('\n')
+    }
+}))
 
 process.exit(0);
