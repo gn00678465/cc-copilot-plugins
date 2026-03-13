@@ -1,0 +1,17 @@
+{
+  "skill_name": "commit-message",
+  "evals": [
+    {
+      "id": 0,
+      "name": "simple-feat",
+      "prompt": "我新增了一個登入頁面元件 `src/components/Login.tsx`，請幫我寫 commit message 並執行。",
+      "expected_output": "應包含 feat 類型，並建議將訊息寫入 .git/COMMIT_EDITMSG，最後執行 git commit -F"
+    },
+    {
+      "id": 1,
+      "name": "complex-refactor",
+      "prompt": "我重構了 `src/auth.ts` 的認證邏輯，並更新了 `package.json` 的版本。變更較多，請幫我分析。",
+      "expected_output": "應識別為重構或混合變更，建議詳細的 body，並使用 -F 提交模式"
+    }
+  ]
+}
