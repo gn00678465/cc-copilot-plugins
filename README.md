@@ -1,152 +1,59 @@
-# VS Code copilot prompt 整理
+# Copilot Plugin
 
-## Use prompt files in VS Code
+本專案包含一組用於 VS Code 與 GitHub Copilot CLI 的自定義插件與 Prompt 集合。
 
-**prompts/: GitHub Copilot 提示檔案**
+## 安裝與使用方式
 
-Prompt files 預設放在 `.github/prompts/` 資料夾下。你可以透過 VS Code 設定 [chat.promptFilesLocations](vscode://settings/chat.promptFilesLocations) 來配置多個 prompt 檔案來源目錄。
+### 1. VS Code (Agent Plugins & Custom Prompts)
 
-在 Chat view 內使用 `/` 呼叫。For example, `/<file-name>`
+VS Code 現已支援「Agent Plugins (Preview)」，這是一種更結構化的方式來封裝指令、技能與 Hook。
 
-**配置多個 prompt 目錄範例：**
-
+#### **A. 啟用 Agent Plugins 支援**
+由於此功能目前處於預覽階段，請先確保您的 VS Code `settings.json` 具備以下設定：
 ```json
-// .vscode/settings.json
 {
-  "chat.promptFilesLocations": {
-    ".github/prompts": true,                    // 專案特定的 prompts
-    ".github/prompts-common": true                      // 其他自訂的 prompts
-  }
+  "chat.plugins.enabled": true
 }
 ```
 
-詳細說明請參考 [VS Code Prompt Files 文件](https://code.visualstudio.com/docs/copilot/customization/prompt-files)。
+#### **B. 遠端安裝 (Remote Plugin)**
+您可以直接將此 GitHub 儲存庫註冊為插件來源：
+1.  開啟 VS Code 設定 (JSON)。
+2.  在 `chat.plugins.marketplaces` 中加入此儲存庫：
+    ```json
+    "chat.plugins.marketplaces": [
+      "gn00678465/copilot-starter"
+    ]
+    ```
+3.  **安裝插件**：
+    - 開啟「延伸模組 (Extensions)」側邊欄。
+    - 在搜尋框輸入 `@agentPlugins`（或點擊「...」> `Views` > `Agent Plugins`）。
+    - 找到 **copilot-plugin-starter** 並點擊「安裝 (Install)」。
 
-## Specify custom instructions in settings
+#### **C. 其他自定義設定 (Legacy/Support)**
+若要直接使用專案中的 Prompt 檔案或 Hook，本專案預設提供的 `.vscode/settings.json` 已包含：
+- **Custom Prompts**: `chat.promptFilesLocations` (在 Chat 中輸入 `#` 引用 `prompts/` 內容)。
+- **Hooks**: `chat.hookFilesLocations` (執行時自動載入 `./hooks` 邏輯)。
+- **Commit Instructions**: 符合規範的 commit message 生成指令。
 
-| Type | Setting name |
-| --- | --- |
-| Commit message generation | [github.copilot.chat.commitMessageGeneration.instructions](vscode://settings/github.copilot.chat.commitMessageGeneration.instructions) |
+### 2. GitHub Copilot CLI (Remote Plugin)
 
-```json
-// .vscode/settings.json
-{
-  "github.copilot.chat.commitMessageGeneration.instructions": [
-    {
-      "file": "<path>/commit-message-generation.instructions.md"
-    }
-  ]
-}
-```
-
-詳細說明請參考 [VS Code Instructions 文件](https://code.visualstudio.com/docs/copilot/customization/custom-instructions#_specify-custom-instructions-in-settings)。
-
-## 在多個專案中使用 Git Submodule
-
-如果你想在多個專案中重複使用這些通用的 Copilot 設定，可以使用 Git Submodule 的方式引入。
-
-### 初次設定
-
-**1. 在你的專案中加入此 repository 作為 submodule:**
+如果您已安裝 [GitHub Copilot CLI](https://github.com/github/copilot-cli)，可以從 GitHub 遠端安裝此插件：
 
 ```bash
-# 在專案根目錄執行
-git submodule add https://github.com/gn00678465/vscode-copilot-prompts.git .github/copilot-common
-git commit -m "chore: 加入 copilot prompts submodule"
+# 從 GitHub 安裝
+copilot plugin install gn00678465/copilot-starter
 ```
 
-**2. 設定 VS Code 設定檔 (`.vscode/settings.json`):**
-
-```json
-{
-  "chat.promptFilesLocations": {
-    ".github/prompts": true,                          // 專案特定的 prompts
-    ".github/copilot-common/prompts": true            // 通用的 prompts
-  },
-  "github.copilot.chat.commitMessageGeneration.instructions": [
-    {
-      "file": ".github/copilot-common/instructions/commit-message-generation.instructions.md"
-    }
-  ]
-}
-```
-
-### Clone 已包含 Submodule 的專案
-
-當其他人 clone 包含 submodule 的專案時，需要初始化 submodule:
-
+安裝後，您可以透過以下指令查看已安裝的插件：
 ```bash
-# 方法 1: Clone 時同時初始化 submodule
-git clone --recurse-submodules <repository-url>
-
-# 方法 2: Clone 後再初始化 submodule
-git clone <repository-url>
-cd <project-directory>
-git submodule update --init --recursive
+copilot plugin list
 ```
 
-### 更新 Submodule
-
-當通用的 Copilot 設定有更新時，可以更新 submodule:
-
-```bash
-# 更新所有 submodule 到最新版本
-git submodule update --remote
-
-# 或者進入 submodule 目錄手動更新
-cd .github/copilot-common
-git pull origin main
-cd ../..
-
-# 提交更新
-git add .github/copilot-common
-git commit -m "chore: 更新 copilot prompts 設定"
-```
-
-### 專案結構範例
-
-使用 submodule 後的專案結構:
-
-```
-your-project/
-├── .github/
-│   ├── prompts/                    # 專案特定的 prompts
-│   │   └── custom-prompt.prompt.md
-│   └── copilot-common/             # 通用的 prompts (submodule)
-│       ├── prompts/
-│       │   └── gitignore-generator.prompt.md
-│       ├── instructions/
-│       │   └── commit-message-generation.instructions.md
-│       └── README.md
-├── .vscode/
-│   └── settings.json
-└── .gitmodules                     # Submodule 配置檔案
-```
-
-### 移除 Submodule
-
-如果不再需要使用 submodule:
-
-```bash
-# 1. 移除 submodule 目錄
-git submodule deinit -f .github/copilot-common
-git rm -f .github/copilot-common
-rm -rf .git/modules/.github/copilot-common
-
-# 2. 提交變更
-git commit -m "chore: 移除 copilot prompts submodule"
-```
-
-### 注意事項
-
-- ⚠️ Submodule 預設會指向特定的 commit，不會自動更新
-- 💡 建議定期執行 `git submodule update --remote` 來取得最新版本
-- 📝 團隊成員需要了解 submodule 的基本操作
-- 🔄 在 CI/CD 環境中記得加入 `--recurse-submodules` 參數
 
 ## 參考
 
-- [VS Code docs](https://code.visualstudio.com/docs/copilot/customization/overview?originUrl=%2Fdocs%2Fcopilot%2Fcustomization%2Fprompt-files)
-- [Git Submodules 官方文檔](https://git-scm.com/book/en/v2/Git-Tools-Submodules)
+- [VS Code docs: Custom prompt files](https://code.visualstudio.com/docs/copilot/customization/overview?originUrl=%2Fdocs%2Fcopilot%2Fcustomization%2Fprompt-files)
+- [GitHub Docs: Plugins for Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-finding-installing)
 - [Will 保哥整理的最佳GitHub Copilot 設定](https://github.com/doggy8088/github-copilot-configs)
 - [Awesome GitHub Copilot Customizations](https://github.com/github/awesome-copilot)

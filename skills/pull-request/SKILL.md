@@ -2,10 +2,10 @@
 name: pull-request
 description: 協助建立、修改、查看、管理或審查 (Review) GitHub Pull Request (PR)。自動分析變更內容並產生符合 Conventional Commits 規範的標題與描述。支援：(1) 從分支建立 PR、(2) 修改現有 PR、(3) 自動化程式碼審查 (Review)、(4) 檢查 PR 狀態。適用於「建立 PR」、「review PR」、「幫我開 PR」、「修改 PR 內容」等請求。透過 GitHub CLI (gh) 執行。
 metadata:
-   version: 0.2.0
+   version: 0.3.0
 ---
 
-# GitHub Pull Request 助手 (v0.2.0)
+# GitHub Pull Request
 
 協助使用者管理 Pull Request 生命週期，包含建立、修改及自動化程式碼審查。
 
