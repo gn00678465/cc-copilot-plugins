@@ -1,0 +1,35 @@
+{
+  "skill_name": "pull-request",
+  "evals": [
+    {
+      "id": 1,
+      "name": "complex-conventional-title",
+      "prompt": "建立 PR。變更內容：修正了 GitHub Node 在處理分頁時的效能問題，這是一個 perf 類型，這項變更會導致舊版 API 回傳格式不相容（Breaking Change）。",
+      "expected_output": "標題應為 `perf(GitHub Node)!: ...`，描述中必須明確列出 Breaking Change 對前端的影響。"
+    },
+    {
+      "id": 2,
+      "name": "security-focused-review",
+      "prompt": "Review PR #456。這是一個搜尋功能，代碼中直接將 `req.query.q` 拼接到 SQL 字串中，且前端使用 `v-html` 渲染搜尋結果。請產出審查報告。",
+      "expected_output": "報告必須以 Critical 等級指出 SQL Injection 與 XSS 漏洞，並提供正確的參數化查詢範例。"
+    },
+    {
+      "id": 3,
+      "name": "multi-layer-feature-pr",
+      "prompt": "建立一個大型 PR。包含：1. 新增 `orders` 資料表 migration, 2. 新增 `/api/orders` 端點, 3. 前端訂單列表頁面。目標分支為 `develop`。",
+      "expected_output": "描述應自動分類「修改內容」：資料庫、API、前端，並在風險評估中正確識別 Migration 風險。"
+    },
+    {
+      "id": 4,
+      "name": "edit-existing-pr-workflow",
+      "prompt": "PR #789 已存在。請幫我把標題改為 `refactor: 優化訂單查詢邏輯`，並新增 `priority:high` 與 `backend` 標籤，同時指定 @senior-dev 為審核者。",
+      "expected_output": "應正確產生 `gh pr edit` 指令組合，包含 --title, --add-label 與 --add-reviewer。"
+    },
+    {
+      "id": 5,
+      "name": "review-clarity-pass",
+      "prompt": "Review 一段邏輯極其複雜、巢狀深達 5 層的程式碼。雖然功能正確，但難以維護。請產出報告。",
+      "expected_output": "報告應在「程式碼清晰度」面向提出「早回傳 (Early Returns)」的建議，並解釋其對維護性的價值。"
+    }
+  ]
+}

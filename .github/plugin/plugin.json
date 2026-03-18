@@ -1,0 +1,17 @@
+{
+  "name": "copilot-plugin-starter",
+  "description": "A starter template for building VS Code Copilot Plugins",
+  "version": "0.1.0",
+  "author": {
+    "name": "gn00678465"
+  },
+  "repository": "https://github.com/github/awesome-copilot",
+  "license": "MIT",
+  "agents": [
+    "./agents"
+  ],
+  "skills": [
+    "./skills/commit-message",
+    "./skills/pull-request"
+  ]
+}
