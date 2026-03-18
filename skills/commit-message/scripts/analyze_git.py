@@ -57,7 +57,7 @@ def analyze():
     stats_raw = run_command("git diff --staged --stat")
     if not stats_raw:
         print("Error: No staged changes found.")
-        sys.exit(0)
+        sys.exit(1)
 
     # 解析統計資料 (e.g. " 5 files changed, 20 insertions(+), 10 deletions(-)")
     files_changed = 0
@@ -105,7 +105,7 @@ def analyze():
 
     # 高風險檔案檢查
     lock_files = [
-        "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun-lock.json",
+        "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb",
         "Cargo.lock", "go.sum", "poetry.lock", "Gemfile.lock", "composer.lock"
     ]
     found_locks = [f for f in files_list if os.path.basename(f) in lock_files]

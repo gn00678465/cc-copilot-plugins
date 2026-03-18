@@ -201,7 +201,7 @@ python scripts/analyze_git.py
 
 ## 注意事項
 
-- **Lock 檔案偵測範圍**：包含 `package-lock.json`、`yarn.lock`、`pnpm-lock.yaml`、`bun-lock.json`、`Cargo.lock`、`go.sum`、`poetry.lock`、`Gemfile.lock` 等。
+- **Lock 檔案偵測範圍**：包含 `package-lock.json`、`yarn.lock`、`pnpm-lock.yaml`、`bun.lockb`、`Cargo.lock`、`go.sum`、`poetry.lock`、`Gemfile.lock` 等。
 - **只有 staged 狀態的變更會被考慮**。
 - 若變更過於複雜，建議拆分為多個獨立的 commit。
 - 當提交符合一或多種提交類型時，應盡可能切成多個提交。

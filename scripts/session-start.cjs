@@ -1,4 +1,4 @@
-﻿const { getPackageManager } = require('./lib/package-manager.cjs')
+const { getPackageManager } = require('./lib/package-manager.cjs')
 const { detectProjectType } = require('./lib/project-detect.cjs')
 const { log, output } = require('./lib/utils.cjs')
 
@@ -23,7 +23,7 @@ require('node:process').stdin.on('end', () => {
 
 async function main(projectDir) {
   // Detect and report package manager
-  const pm = getPackageManager(projectDir)
+  const pm = getPackageManager({ projectDir })
   log(`[SessionStart] Package manager: ${pm.name} (${pm.source})`)
 
   // If no explicit package manager config was found, show selection prompt

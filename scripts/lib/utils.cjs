@@ -1,5 +1,4 @@
 const fs = require('node:fs')
-const path = require('node:path')
 
 function ensureDir(dirPath) {
   if (!fs.existsSync(dirPath)) {
