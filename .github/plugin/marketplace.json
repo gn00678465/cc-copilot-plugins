@@ -1,7 +1,7 @@
 {
-    "name": "copilot-starter-plugins",
+    "name": "copilot-starter-marketplace",
     "metadata": {
-        "description": "GitHub Copilot starter plugins",
+        "description": "Marketplace registry for GitHub Copilot workflow plugins",
         "version": "1.0.0"
     },
     "owner": {
@@ -11,7 +11,8 @@
     "plugins": [
         {
             "name": "copilot-starter",
-            "description": "A starter template for building VS Code Copilot Plugins",
+            "source": "./plugins/copilot-starter",
+            "description": "GitHub Copilot plugin bundle for commit and pull request workflows",
             "version": "1.0.0",
             "skills": [
                 "./skills/commit-message",
