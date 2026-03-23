@@ -1,4 +1,4 @@
-# Pull Request 描述範本 (v0.2.0)
+# Pull Request 描述範本 (v0.3.0)
 
 這是 Pull Request 描述與標題的標準格式指南。
 
@@ -40,6 +40,14 @@
 ### 相關連結
 - [Linear 連結](https://linear.app/...)
 - [GitHub Issue] (closes #123)
+
+### 變更類型
+- [ ] 新增功能 (feat)
+- [ ] 修復錯誤 (fix)
+- [ ] 重構 (refactor)
+- [ ] 文件 (docs)
+- [ ] 測試 (tests)
+- [ ] 其他 (chore / ci / perf)
 
 ### 備註 (選填)
 - 測試帳號、部署提示或截圖。

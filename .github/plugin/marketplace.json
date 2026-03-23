@@ -1,0 +1,23 @@
+{
+    "name": "copilot-starter-marketplace",
+    "metadata": {
+        "description": "Marketplace registry for GitHub Copilot workflow plugins",
+        "version": "1.0.0"
+    },
+    "owner": {
+        "name": "gn00678465",
+        "email": "gn00678465@gmail.com"
+    },
+    "plugins": [
+        {
+            "name": "copilot-starter",
+            "source": "./plugins/copilot-starter",
+            "description": "GitHub Copilot plugin bundle for commit and pull request workflows",
+            "version": "1.0.0",
+            "skills": [
+                "./skills/commit-message",
+                "./skills/pull-request"
+            ]
+        }
+    ]
+}
