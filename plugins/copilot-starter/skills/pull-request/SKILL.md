@@ -58,6 +58,7 @@ graph TD
    - 執行 `git log origin/main..HEAD --oneline` 取得 commit 清單。
    - 執行 `git diff --stat origin/main..HEAD` 取得檔案變更統計。
 3. **內容產生**：參考 `references/pr-template.md` 產生 zh-TW 描述。
+   - 根據 commit 類型自動勾選描述中的「變更類型」checkboxes（例如含 `feat` commit 則勾選「新增功能 (feat)」）。
 4. **執行建立**：
    - **必須**使用 `pr-body.md` 暫存檔，並透過 `gh pr create --body-file pr-body.md` 執行。
 

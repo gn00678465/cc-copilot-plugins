@@ -30,6 +30,12 @@
       "name": "review-clarity-pass",
       "prompt": "Review 一段邏輯極其複雜、巢狀深達 5 層的程式碼。雖然功能正確，但難以維護。請產出報告。",
       "expected_output": "報告應在「程式碼清晰度」面向提出「早回傳 (Early Returns)」的建議，並解釋其對維護性的價值。"
+    },
+    {
+      "id": 6,
+      "name": "change-type-checkbox-auto-select",
+      "prompt": "建立 PR。Commits 包含：`feat(auth): Add OAuth login`、`docs: Update README` 以及 `test: Add unit tests for auth`。",
+      "expected_output": "描述中的變更類型 checkboxes 應自動勾選「新增功能 (feat)」、「文件 (docs)」與「測試 (tests)」，其餘項目維持未勾選。"
     }
   ]
 }
