@@ -2,24 +2,31 @@ const { getPackageManager } = require('./lib/package-manager.cjs')
 const { detectProjectType } = require('./lib/project-detect.cjs')
 const { log, output } = require('./lib/utils.cjs')
 
-let rawInput = ''
-require('node:process').stdin.setEncoding('utf8')
-require('node:process').stdin.on('data', (chunk) => {
-  rawInput += chunk
+readStdinRaw().then(({ cwd }) => {
+  const projectDir = cwd || require('node:process').cwd()
+  return main(projectDir)
+}).catch((err) => {
+  console.error('[SessionStart] Error:', err.message)
+  require('node:process').exit(0)
 })
-require('node:process').stdin.on('end', () => {
-  let hookInput = {}
-  try {
-    hookInput = JSON.parse(rawInput)
-  }
-  catch {}
 
-  const projectDir = hookInput.cwd || require('node:process').cwd()
-  main(projectDir).catch((err) => {
-    console.error('[SessionStart] Error:', err.message)
-    require('node:process').exit(0)
+async function readStdinRaw() {
+  return new Promise((resolve) => {
+    let rawInput = ''
+    require('node:process').stdin.setEncoding('utf8')
+    require('node:process').stdin.on('data', (chunk) => {
+      rawInput += chunk
+    })
+    require('node:process').stdin.on('end', () => {
+      try {
+        resolve(JSON.parse(rawInput))
+      }
+      catch {
+        resolve({})
+      }
+    })
   })
-})
+}
 
 async function main(projectDir) {
   // Detect and report package manager
