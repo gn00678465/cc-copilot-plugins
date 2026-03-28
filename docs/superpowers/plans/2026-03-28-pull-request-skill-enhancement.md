@@ -377,7 +377,7 @@ git diff --stat origin/main..HEAD | tail -1
 
 ## Deployment 區塊（選用）
 
-**觸發條件：** 使用者訊息含 `deploy`、`migration`、`env`、`feature flag` 等字詞，或明確要求加入部署清單時，在完整版描述的「備註」前插入此區塊。
+**觸發條件：** 當 PR 符合下列任一情境時，應在完整版描述的「備註」前插入此區塊：(1) 使用者訊息含 `deploy`、`migration`、`env`、`feature flag` 等字詞，或明確要求加入部署清單；(2) commit 訊息包含部署 / migration / env 相關關鍵字；(3) 變更檔案路徑包含 infra / deploy / migration / helm / k8s 等目錄或檔名。
 
 ```markdown
 ### Deployment

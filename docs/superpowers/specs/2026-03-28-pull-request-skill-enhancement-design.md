@@ -19,7 +19,7 @@
 |------|------|
 | 語言 | 預設 zh-TW，使用者明確指定（english / in English / 用英文）時切換 |
 | PR 模板 | 合併現有結構，依 PR 規模（small / standard）提供兩種版本 |
-| Deployment 區塊 | 選用，使用者明確要求時才展開 |
+| Deployment 區塊 | 選用，符合以下任一條件時自動插入：(1) 使用者訊息含 deploy/migration/env/feature flag 等字詞；(2) commit 訊息含部署相關關鍵字；(3) 變更檔案路徑含 infra/deploy/migration/helm/k8s 等目錄或檔名 |
 | Review Comment | Emoji 標籤 + 三段結構（Critical/Important 用完整格式，Suggestion 用單行） |
 | 觸發詞 | description 欄位放關鍵字，SKILL.md 主體放完整 decision tree |
 
@@ -41,7 +41,9 @@
 ### PR 規模判斷條件
 
 ```
-Small PR：commits ≤ 2 且 diff stat ≤ 10 個檔案
+Small PR：commits ≤ 2 且變更檔案數 ≤ 10 個檔案
+  # 變更檔案數計算方式（與 SKILL.md / pr-template 一致）：
+  # git diff --name-only origin/main...HEAD | wc -l
 Standard PR：其餘情況
 ```
 

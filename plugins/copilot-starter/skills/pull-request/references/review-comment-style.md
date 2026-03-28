@@ -74,6 +74,7 @@
 | Emoji | 類別 | 對應嚴重度 |
 |-------|------|-----------|
 | 🚨 | 阻擋合併的問題 | Critical |
+| ⚠️ | 重要但非阻擋的問題（違反規範、引入技術債） | Important |
 | 🔒 | 安全性問題 | Critical / Important |
 | ⚡ | 效能問題 | Important / Suggestion |
 | 🧹 | 程式碼清理 | Suggestion |

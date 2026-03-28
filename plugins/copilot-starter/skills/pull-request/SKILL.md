@@ -1,6 +1,6 @@
 ---
 name: pull-request
-description: 管理 GitHub Pull Request 完整生命週期的專用 skill，應在以下任何情況立即使用：使用者提到建立/開/推送 PR、提交 pull request、open a PR、submit PR、code review、審查程式碼、review diff、check my PR、修改或更新 PR 描述/標題/標籤、查看 PR 狀態或 CI 結果。自動分析 git 變更並產生符合 Conventional Commits 規範的標題，依 PR 規模選擇精簡版或完整版模板，執行五層程式碼審查並輸出結構化報告。支援中英文切換（含 english / 英文 / 用英語 等關鍵字）。透過 GitHub CLI (gh) 執行。不適用於純 git push、git merge 或非 GitHub 平台的 PR 操作。
+description: 管理 GitHub Pull Request 完整生命週期的專用 skill，應在以下任何情況立即使用：使用者提到建立/開 PR、提交或更新 PR 分支（例如推送 PR 變更）、提交 pull request、open a PR、submit PR、code review、審查程式碼、review diff、check my PR、修改或更新 PR 描述/標題/標籤、查看 PR 狀態或 CI 結果。自動分析 git 變更並產生符合 Conventional Commits 規範的標題，依 PR 規模選擇精簡版或完整版模板，執行五層程式碼審查並輸出結構化報告。支援中英文切換（含 english / 英文 / 用英語 等關鍵字）。透過 GitHub CLI (gh) 執行。不適用於純 git push、git merge 或非 GitHub 平台的 PR 操作。
 metadata:
    version: 0.4.0
 ---
@@ -58,7 +58,7 @@ graph TD
     P5 --> RPT[產生 gh-pr-review.md 報告]
 ```
 
-### 主流程路由規則（衛述句文字版）
+### 主流程路由規則（衛述句 / Guard Clause 文字版）
 
 請嚴格按照以下順序評估，一旦滿足某項規則，立即執行對應動作並終止後續判斷。
 
@@ -153,7 +153,7 @@ graph TD
    - Pass 4: 效能（DB query、演算法複雜度）
    - Pass 5: 文件（註解、README）
 3. **信心過濾**：僅回報信心度 > 80% 的問題。
-4. **產生報告**：將結果寫入 `gh-pr-review.md`（不 commit）。報告須包含：摘要、議題清單（🚨 Critical / ⚠️ Important / 建議 / ✅ 值得稱讚）、最終建議（Verdict）。Comment 格式參閱 `references/review-comment-style.md`。
+4. **產生報告**：將結果寫入 `gh-pr-review.md`（不 commit）。報告須包含：摘要、議題清單（🚨 Critical / ⚠️ Important / 建議 / ✅ 值得稱讚）、最終建議（Verdict）。Comment 與報告格式參閱 `references/review-comment-style.md`（⚠️ 定義於 Emoji 對應表）。
 
 ---
 
