@@ -1,8 +1,6 @@
 ---
 name: pull-request
 description: 管理 GitHub Pull Request 完整生命週期的專用 skill，應在以下任何情況立即使用：使用者提到建立/開 PR、提交或更新 PR 分支（例如推送 PR 變更）、提交 pull request、open a PR、submit PR、code review、審查程式碼、review diff、check my PR、修改或更新 PR 描述/標題/標籤、查看 PR 狀態或 CI 結果。自動分析 git 變更並產生符合 Conventional Commits 規範的標題，依 PR 規模選擇精簡版或完整版模板，執行五層程式碼審查並輸出結構化報告。支援中英文切換（含 english / 英文 / 用英語 等關鍵字）。透過 GitHub CLI (gh) 執行。不適用於純 git push、git merge 或非 GitHub 平台的 PR 操作。
-metadata:
-   version: 0.4.0
 ---
 
 # GitHub Pull Request

@@ -1,1 +1,18 @@
-../.github/plugin/marketplace.json
+{
+    "name": "cc-copilot-plugin-marketplace",
+    "metadata": {
+        "description": "Marketplace registry for Claude Code & GitHub Copilot workflow plugins",
+        "version": "0.1.0"
+    },
+    "owner": {
+        "name": "gn00678465",
+        "email": "gn00678465@gmail.com"
+    },
+    "plugins": [
+        {
+            "name": "cc-copilot-plugin",
+            "source": "./plugins/cc-copilot-plugin",
+            "description": "Claude Code & GitHub Copilot plugin bundle for commit and pull request workflows"
+        }
+    ]
+}
