@@ -1,5 +1,5 @@
 {
-    "name": "cc-copilot-plugin-marketplace",
+    "name": "cc-copilot-plugins",
     "metadata": {
         "description": "Marketplace registry for Claude Code & GitHub Copilot workflow plugins",
         "version": "0.1.0"
