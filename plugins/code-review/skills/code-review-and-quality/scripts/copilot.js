@@ -9,7 +9,9 @@
  * and printing a mission start message.
  *
  * Usage:
- *   node copilot.js --model claude-opus-4-5 --max-iterate 3 --prompt "Review this code"
+ *   node copilot.js PROMPT [--max-iterations N] [--model MODEL_NAME]
+ *
+ * PROMPT is positional — all non-flag words are joined as the prompt.
  */
 
 const fs = require('fs');
@@ -29,48 +31,41 @@ function parseArgs(argv) {
   const result = {
     model: DEFAULT_MODEL,
     maxIterations: DEFAULT_MAX_ITERATIONS,
-    prompt: null,
+    promptParts: [],
   };
 
   let i = 0;
   while (i < args.length) {
     const arg = args[i];
 
-    switch (arg) {
-      case '--model':
-        if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
-          exitWithError('--model requires a value (e.g. --model claude-opus-4-5)');
-        }
-        result.model = args[i + 1];
-        i += 2;
-        break;
-
-      case '--max-iterate':
-        if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
-          exitWithError('--max-iterate requires a numeric value (e.g. --max-iterate 5)');
-        }
-        const n = parseInt(args[i + 1], 10);
-        if (isNaN(n) || n < 1) {
-          exitWithError(`--max-iterate must be a positive integer, got: ${args[i + 1]}`);
-        }
-        result.maxIterations = n;
-        i += 2;
-        break;
-
-      case '--prompt':
-        if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
-          exitWithError('--prompt requires a text value (e.g. --prompt "Review staged changes")');
-        }
-        result.prompt = args[i + 1];
-        i += 2;
-        break;
-
-      default:
-        exitWithError(`Unknown argument: ${arg}`);
+    if (arg === '--model') {
+      if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
+        exitWithError('--model requires a value (e.g. --model claude-opus-4-5)');
+      }
+      result.model = args[i + 1];
+      i += 2;
+    } else if (arg === '--max-iterations') {
+      if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
+        exitWithError('--max-iterations requires a numeric value (e.g. --max-iterations 5)');
+      }
+      const n = parseInt(args[i + 1], 10);
+      if (isNaN(n) || n < 1) {
+        exitWithError(`--max-iterations must be a positive integer, got: ${args[i + 1]}`);
+      }
+      result.maxIterations = n;
+      i += 2;
+    } else {
+      // Positional argument — collect as part of the prompt
+      result.promptParts.push(arg);
+      i += 1;
     }
   }
 
-  return result;
+  return {
+    model: result.model,
+    maxIterations: result.maxIterations,
+    prompt: result.promptParts.join(' '),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -117,10 +112,10 @@ function printMissionStart(opts) {
 function main() {
   const opts = parseArgs(process.argv);
 
-  if (!opts.prompt) {
+  if (!opts.prompt.trim()) {
     exitWithError(
-      '--prompt is required. Provide the review context, e.g.:\n' +
-        '  node copilot.js --prompt "Review the staged changes for quality"'
+      'A prompt is required. Provide the review context, e.g.:\n' +
+        '  /code-review-and-quality Review the staged changes for quality'
     );
   }
 
