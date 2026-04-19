@@ -1,0 +1,65 @@
+{
+  "skill_name": "code-review-and-quality",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/code-review-and-quality Review the staged authentication module changes",
+      "expected_output": "copilot.js runs successfully, .claude/review-state.json created with prompt='Review the staged authentication module changes', iteration=1, active=true, max_iterations=5 (default), banner printed",
+      "files": [],
+      "assertions": [
+        {
+          "name": "state_file_created",
+          "description": "review-state.json is created at .claude/review-state.json"
+        },
+        {
+          "name": "state_prompt_correct",
+          "description": "state.prompt equals 'Review the staged authentication module changes'"
+        },
+        {
+          "name": "state_defaults_applied",
+          "description": "state.max_iterations=5, state.iteration=1, state.active=true"
+        },
+        {
+          "name": "banner_printed",
+          "description": "stdout contains '🔍 Code Review Loop activated!'"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "/code-review-and-quality Review staged changes for security vulnerabilities --max-iterations 3 --model claude-opus-4-5",
+      "expected_output": "copilot.js runs with max_iterations=3, model=claude-opus-4-5, prompt='Review staged changes for security vulnerabilities', state file created with these exact values",
+      "files": [],
+      "assertions": [
+        {
+          "name": "state_max_iterations_overridden",
+          "description": "state.max_iterations equals 3"
+        },
+        {
+          "name": "state_model_overridden",
+          "description": "state.model equals 'claude-opus-4-5'"
+        },
+        {
+          "name": "state_prompt_stops_before_flags",
+          "description": "state.prompt equals 'Review staged changes for security vulnerabilities' (not including --max-iterations or --model)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "/code-review-and-quality --max-iterations 2",
+      "expected_output": "copilot.js exits with error message indicating a prompt is required, no state file created",
+      "files": [],
+      "assertions": [
+        {
+          "name": "error_message_shown",
+          "description": "stderr contains error indicating prompt is required"
+        },
+        {
+          "name": "no_state_file_created",
+          "description": ".claude/review-state.json is NOT created (or script exits with non-zero code)"
+        }
+      ]
+    }
+  ]
+}

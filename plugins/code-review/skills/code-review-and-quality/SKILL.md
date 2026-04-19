@@ -13,6 +13,6 @@ Execute the setup script to initialize the code review loop:
 node "${CLAUDE_PLUGIN_ROOT}/skills/code-review-and-quality/scripts/copilot.js" $ARGUMENTS
 ```
 
-Please work on the task. When you try to exit, the stop hook will invoke a Reviewer model to evaluate the code and either issue **Approval** or request specific changes.
+Now invoke the `code-review-and-quality` skill to begin the review. That skill will call the `code-review` agent to conduct the full five-axis review and issue **Approval** when all Critical and Important findings are resolved.
 
-CRITICAL RULE: Continue iterating and addressing all Critical and Important issues until the Reviewer issues **Approval**. Do not attempt to end the session before genuine approval is received.
+CRITICAL RULE: Continue iterating and addressing all findings until the `code-review` agent issues **Approval**. Do not attempt to end the session before genuine approval is received.
