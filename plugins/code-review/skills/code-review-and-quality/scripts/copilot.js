@@ -76,9 +76,21 @@ function exitWithError(message) {
   process.exit(1);
 }
 
+function findProjectRoot() {
+  let dir = process.cwd();
+  while (true) {
+    if (fs.existsSync(path.join(dir, '.git'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return process.cwd();
+    dir = parent;
+  }
+}
+
 function writeStateFile(state) {
-  fs.mkdirSync('.claude', { recursive: true });
-  const statePath = path.join('.claude', 'review-state.json');
+  const root = findProjectRoot();
+  const claudeDir = path.join(root, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  const statePath = path.join(claudeDir, 'review-state.json');
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf8');
 }
 

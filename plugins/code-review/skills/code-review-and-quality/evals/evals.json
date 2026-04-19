@@ -3,61 +3,61 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "/code-review-and-quality Review the staged authentication module changes",
-      "expected_output": "copilot.js runs successfully, .claude/review-state.json created with prompt='Review the staged authentication module changes', iteration=1, active=true, max_iterations=5 (default), banner printed",
+      "prompt": "Use copilot with --plugin-dir plugins/code-review and verify which skills are loaded. Run: copilot --plugin-dir plugins/code-review -p 'List all available skills from the loaded plugin' --allow-all-tools",
+      "expected_output": "The session recognizes both 'cancel-review' and 'code-review-and-quality' as available skills from the plugin.",
       "files": [],
       "assertions": [
         {
-          "name": "state_file_created",
-          "description": "review-state.json is created at .claude/review-state.json"
+          "name": "cancel_review_skill_present",
+          "description": "Output lists 'cancel-review' as an available skill"
         },
         {
-          "name": "state_prompt_correct",
-          "description": "state.prompt equals 'Review the staged authentication module changes'"
-        },
-        {
-          "name": "state_defaults_applied",
-          "description": "state.max_iterations=5, state.iteration=1, state.active=true"
-        },
-        {
-          "name": "banner_printed",
-          "description": "stdout contains '🔍 Code Review Loop activated!'"
+          "name": "code_review_and_quality_skill_present",
+          "description": "Output lists 'code-review-and-quality' as an available skill"
         }
       ]
     },
     {
       "id": 2,
-      "prompt": "/code-review-and-quality Review staged changes for security vulnerabilities --max-iterations 3 --model claude-opus-4-5",
-      "expected_output": "copilot.js runs with max_iterations=3, model=claude-opus-4-5, prompt='Review staged changes for security vulnerabilities', state file created with these exact values",
+      "prompt": "Start copilot with --plugin-dir plugins/code-review, then invoke '/code-review-and-quality Review the following change: a new function parseArgs() was added to utils.js that splits a string on commas'. Verify that the correct internal skill is used and the review follows the five-axis framework.",
+      "expected_output": "copilot.js runs and creates .claude/review-state.json. The review uses Critical/Important/Suggestion/Nit categories and ends with Approval or a required-changes list.",
       "files": [],
       "assertions": [
         {
-          "name": "state_max_iterations_overridden",
-          "description": "state.max_iterations equals 3"
+          "name": "state_file_created",
+          "description": ".claude/review-state.json is created with active=true and the review prompt"
         },
         {
-          "name": "state_model_overridden",
-          "description": "state.model equals 'claude-opus-4-5'"
+          "name": "findings_categorized",
+          "description": "Review output uses at least one of: Critical, Important, Suggestion, Nit"
         },
         {
-          "name": "state_prompt_stops_before_flags",
-          "description": "state.prompt equals 'Review staged changes for security vulnerabilities' (not including --max-iterations or --model)"
+          "name": "verdict_present",
+          "description": "Review output ends with 'Approval' or an explicit list of required changes"
         }
       ]
     },
     {
       "id": 3,
-      "prompt": "/code-review-and-quality --max-iterations 2",
-      "expected_output": "copilot.js exits with error message indicating a prompt is required, no state file created",
+      "prompt": "Test the stop hook loop control by running session-stop.js in two scenarios: (A) state file active + transcript containing 'Approval' should allow exit; (B) state file active + transcript without 'Approval' should block exit with iteration incremented. Use: node plugins/code-review/scripts/session-stop.js with prepared state and transcript files.",
+      "expected_output": "Scenario A: exit code 0, no block JSON, state file deleted. Scenario B: block decision JSON with decision='block', iteration incremented. Scenario C: max_iterations reached allows exit.",
       "files": [],
       "assertions": [
         {
-          "name": "error_message_shown",
-          "description": "stderr contains error indicating prompt is required"
+          "name": "approval_allows_exit",
+          "description": "When transcript contains 'Approval': exit code 0, no block JSON output, state file deleted"
         },
         {
-          "name": "no_state_file_created",
-          "description": ".claude/review-state.json is NOT created (or script exits with non-zero code)"
+          "name": "no_approval_blocks_exit",
+          "description": "When transcript lacks 'Approval': stdout is valid JSON with decision='block'"
+        },
+        {
+          "name": "iteration_incremented_on_block",
+          "description": "When blocked: state file is updated with iteration incremented by 1"
+        },
+        {
+          "name": "max_iterations_allows_exit",
+          "description": "When state.iteration >= state.max_iterations: exit code 0, state file deleted"
         }
       ]
     }
