@@ -6,5 +6,6 @@
         "name": "gn00678465",
         "email": "gn00678465@gmail.com"
     },
-    "skills": ["skills/"]
+    "skills": ["skills/"],
+    "hooks": "hooks/hooks.json"
 }
