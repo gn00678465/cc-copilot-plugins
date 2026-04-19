@@ -1,7 +1,7 @@
 {
-    "name": "code-review-and-quality",
+    "name": "code-review",
     "version": "1.0.0",
-    "description": "Internal review plugin providing multi-axis review skills and master reviewer agent",
+    "description": "Professional code review loop plugin with automated reviewer relay",
     "author": {
         "name": "gn00678465",
         "email": "gn00678465@gmail.com"
