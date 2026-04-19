@@ -1,0 +1,15 @@
+{
+  "description": "Code review plugin stop hook for automated review-fix loops",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-stop.js"
+          }
+        ]
+      }
+    ]
+  }
+}
