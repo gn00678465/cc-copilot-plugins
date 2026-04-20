@@ -5,13 +5,14 @@
 /**
  * Code Review Loop Initialization Script
  *
- * Starts a code-review session by writing state to .claude/review-state.json
+ * Starts a code-review session by writing state to .<mode>/review-state.json
  * and printing a mission start message.
  *
  * Usage:
- *   node copilot.js PROMPT [--max-iterations N] [--model MODEL_NAME]
+ *   node copilot.js PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]
  *
  * PROMPT is positional — all non-flag words are joined as the prompt.
+ * --mode determines the dot-directory: 'claude' → .claude, 'copilot' → .copilot (default: claude)
  */
 
 const fs = require('fs');
@@ -22,6 +23,7 @@ const path = require('path');
 // ---------------------------------------------------------------------------
 const DEFAULT_MODEL = 'claude-opus-4-5';
 const DEFAULT_MAX_ITERATIONS = 5;
+const DEFAULT_MODE = 'claude';
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -31,6 +33,7 @@ function parseArgs(argv) {
   const result = {
     model: DEFAULT_MODEL,
     maxIterations: DEFAULT_MAX_ITERATIONS,
+    mode: DEFAULT_MODE,
     promptParts: [],
   };
 
@@ -54,6 +57,16 @@ function parseArgs(argv) {
       }
       result.maxIterations = n;
       i += 2;
+    } else if (arg === '--mode') {
+      if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
+        exitWithError("--mode requires a value: 'claude' or 'copilot'");
+      }
+      const m = args[i + 1].toLowerCase();
+      if (m !== 'claude' && m !== 'copilot') {
+        exitWithError(`--mode must be 'claude' or 'copilot', got: ${args[i + 1]}`);
+      }
+      result.mode = m;
+      i += 2;
     } else {
       // Positional argument — collect as part of the prompt
       result.promptParts.push(arg);
@@ -64,6 +77,7 @@ function parseArgs(argv) {
   return {
     model: result.model,
     maxIterations: result.maxIterations,
+    mode: result.mode,
     prompt: result.promptParts.join(' '),
   };
 }
@@ -86,16 +100,16 @@ function findProjectRoot() {
   }
 }
 
-function writeStateFile(state) {
+function writeStateFile(state, mode) {
   const root = findProjectRoot();
-  const claudeDir = path.join(root, '.claude');
-  fs.mkdirSync(claudeDir, { recursive: true });
-  const statePath = path.join(claudeDir, 'review-state.json');
+  const dotDir = path.join(root, `.${mode}`);
+  fs.mkdirSync(dotDir, { recursive: true });
+  const statePath = path.join(dotDir, 'review-state.json');
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf8');
 }
 
 function printMissionStart(opts) {
-  const { model, maxIterations, prompt } = opts;
+  const { model, maxIterations, prompt, mode } = opts;
 
   process.stdout.write(
     [
@@ -104,11 +118,12 @@ function printMissionStart(opts) {
       `Iteration: 1`,
       `Max iterations: ${maxIterations}`,
       `Model: ${model}`,
+      `Mode: ${mode} (.${mode}/)`,
       '',
       'The stop hook is now active. When you stop this session, the Reviewer',
       'model will evaluate the code and either Approve or request changes.',
       '',
-      '\u26A0\uFE0F  Loop exits when Reviewer outputs "Approval" or max iterations reached.',
+      '\u26A0\uFE0F  Loop exits when Reviewer outputs "> **Approval**" or max iterations reached.',
       '',
       '\uD83D\uDD0D',
       '',
@@ -136,11 +151,12 @@ function main() {
     iteration: 1,
     max_iterations: opts.maxIterations,
     model: opts.model,
+    mode: opts.mode,
     prompt: opts.prompt,
     started_at: new Date().toISOString(),
   };
 
-  writeStateFile(state);
+  writeStateFile(state, opts.mode);
   printMissionStart(opts);
 }
 

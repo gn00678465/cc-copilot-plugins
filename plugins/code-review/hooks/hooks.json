@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-stop.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/session-stop.js claude"
           }
         ]
       }

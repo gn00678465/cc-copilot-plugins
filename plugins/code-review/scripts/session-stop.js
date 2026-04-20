@@ -6,274 +6,207 @@
  * Code Review Stop Hook
  *
  * Runs when Claude Code tries to exit. Checks if a review loop is active,
- * evaluates whether the Reviewer has issued "Approval", and either allows
- * the session to end or blocks the exit with a continuation prompt.
+ * evaluates whether the Reviewer has issued "> **Approval**", and either
+ * allows the session to end or blocks the exit with a continuation prompt.
  *
- * Hook input (stdin): { "transcript_path": "/path/to/transcript.jsonl" }
+ * Hook input (stdin): {
+ *   "transcript_path": "/path/to/transcript.jsonl",
+ *   "cwd": "/path/to/project",
+ *   "last_assistant_message": "...",
+ *   ...
+ * }
  * Hook output (stdout): JSON block decision, or empty to allow exit.
+ *
+ * Usage: node session-stop.js [claude|copilot]   (default: claude)
  */
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const STATE_FILE = path.join('.claude', 'review-state.json');
-const APPROVAL_SIGNAL = 'Approval';
+
+// Matches the exact Approval format from code-review-master agent: > **Approval**
+const APPROVAL_PATTERN = /(?:^|\n)\s*>\s*\*\*Approval\*\*\s*$/;
+
+// ---------------------------------------------------------------------------
+// Hook input
+// ---------------------------------------------------------------------------
+
+function readHookInput() {
+  const raw = fs.readFileSync(0, 'utf8').trim();
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+// ---------------------------------------------------------------------------
+// Workspace / state resolution
+// ---------------------------------------------------------------------------
+
+function resolveWorkspaceRoot(cwd) {
+  return cwd || process.cwd();
+}
+
+function resolveStateFile(workspaceRoot, dotDir) {
+  return path.join(workspaceRoot, dotDir, 'review-state.json');
+}
+
+// ---------------------------------------------------------------------------
+// State I/O
+// ---------------------------------------------------------------------------
+
+function loadState(stateFile) {
+  const raw = fs.readFileSync(stateFile, 'utf8');
+  return JSON.parse(raw);
+}
+
+function saveState(stateFile, state) {
+  const uniqueSuffix = Date.now() + Math.random().toString(36).slice(2);
+  const tmpPath = `${stateFile}.tmp.${uniqueSuffix}`;
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + '\n', 'utf8');
+    fs.renameSync(tmpPath, stateFile);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch (_) {}
+    throw err;
+  }
+}
+
+function clearState(stateFile) {
+  try { fs.unlinkSync(stateFile); } catch (_) {}
+}
+
+// ---------------------------------------------------------------------------
+// Transcript parsing
+// ---------------------------------------------------------------------------
+
+function parseJsonl(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  return raw.split('\n')
+    .filter((line) => line.trim())
+    .flatMap((line) => {
+      try { return [JSON.parse(line)]; } catch (_) { return []; }
+    });
+}
+
+function extractLastAssistantText(transcriptPath) {
+  const entries = parseJsonl(transcriptPath);
+  const assistantEntries = entries.filter((e) => e && e.role === 'assistant');
+
+  if (assistantEntries.length === 0) {
+    throw new Error('No assistant messages found in transcript');
+  }
+
+  const last = assistantEntries[assistantEntries.length - 1];
+  const content = (last.message && Array.isArray(last.message.content))
+    ? last.message.content
+    : [];
+
+  const text = content
+    .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text)
+    .join('\n');
+
+  if (!text) {
+    throw new Error('Assistant message contained no text content');
+  }
+  return text;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Read stdin synchronously and return the raw string.
- * Works on both Unix (/dev/stdin) and Windows (process.stdin fd 0).
- */
-function readStdin() {
-  try {
-    return fs.readFileSync('/dev/stdin', 'utf8');
-  } catch (_) {
-    // Fallback: read from fd 0 directly (Windows-compatible)
-    try {
-      return fs.readFileSync(0, 'utf8');
-    } catch (err) {
-      return '';
-    }
+function expandTilde(filePath) {
+  if (filePath.startsWith('~/') || filePath === '~') {
+    return path.join(os.homedir(), filePath.slice(1));
   }
-}
-
-/**
- * Delete the state file, suppressing errors if it no longer exists.
- */
-function deleteStateFile() {
-  try {
-    fs.unlinkSync(STATE_FILE);
-  } catch (_) {
-    // Already gone — that's fine
-  }
-}
-
-/**
- * Write updated state back to the state file atomically via a temp file.
- * Follows immutability: returns a new state object, writes it to disk.
- *
- * @param {object} state
- * @returns {object} new state object
- */
-function updateStateFile(state) {
-  const newState = { ...state };
-  const uniqueSuffix = Date.now() + Math.random().toString(36).slice(2);
-  const tmpPath = STATE_FILE + '.tmp.' + uniqueSuffix;
-  try {
-    fs.writeFileSync(tmpPath, JSON.stringify(newState, null, 2) + '\n', 'utf8');
-    fs.renameSync(tmpPath, STATE_FILE);
-  } catch (err) {
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch (_) {
-      // Ignore cleanup errors
-    }
-    throw err;
-  }
-  return newState;
-}
-
-/**
- * Parse a JSONL file and return all successfully parsed objects.
- *
- * @param {string} filePath
- * @returns {object[]}
- */
-function parseJsonl(filePath) {
-  let raw;
-  try {
-    raw = fs.readFileSync(filePath, 'utf8');
-  } catch (err) {
-    process.stderr.write(`Warning: Could not read file ${filePath}: ${err.message}\n`);
-    return [];
-  }
-  const lines = raw.split('\n');
-  const results = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      results.push(JSON.parse(trimmed));
-    } catch (_) {
-      // Skip malformed lines
-    }
-  }
-  return results;
-}
-
-/**
- * Extract the text content from the last assistant message in a JSONL transcript.
- *
- * @param {string} transcriptPath
- * @returns {{ text: string } | { error: string }}
- */
-function extractLastAssistantMessage(transcriptPath) {
-  let entries;
-  try {
-    entries = parseJsonl(transcriptPath);
-  } catch (err) {
-    return { error: `Failed to read transcript: ${err.message}` };
-  }
-
-  const assistantEntries = entries.filter(
-    (entry) => entry && entry.role === 'assistant'
-  );
-
-  if (assistantEntries.length === 0) {
-    return { error: 'No assistant messages found in transcript' };
-  }
-
-  const last = assistantEntries[assistantEntries.length - 1];
-
-  // Extract text blocks from message.content[]
-  let textContent = '';
-  try {
-    const content = last.message && Array.isArray(last.message.content)
-      ? last.message.content
-      : [];
-
-    textContent = content
-      .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
-      .map((block) => block.text)
-      .join('\n');
-  } catch (err) {
-    return { error: `Failed to parse assistant message content: ${err.message}` };
-  }
-
-  if (!textContent) {
-    return { error: 'Assistant message contained no text content' };
-  }
-
-  return { text: textContent };
+  return filePath;
 }
 
 // ---------------------------------------------------------------------------
-// Main logic
+// Main
 // ---------------------------------------------------------------------------
-function main() {
-  // Step 1: Read stdin (hook input JSON)
-  const stdinRaw = readStdin();
-  let hookInput = {};
-  try {
-    if (stdinRaw.trim()) {
-      hookInput = JSON.parse(stdinRaw);
-    }
-  } catch (_) {
-    // Non-fatal; we can still check state and transcript path
+
+async function main() {
+  const mode = (process.argv[2] === 'copilot') ? 'copilot' : 'claude';
+  const dotDir = `.${mode}`; // '.claude' or '.copilot'
+
+  const input = readHookInput();
+  const workspaceRoot = resolveWorkspaceRoot(input.cwd);
+  const stateFile = resolveStateFile(workspaceRoot, dotDir);
+
+  if (!fs.existsSync(stateFile)) {
+    return; // No active review loop — allow exit silently
   }
 
-  // Step 2: Check if state file exists
-  if (!fs.existsSync(STATE_FILE)) {
-    // No active review loop — allow exit silently
-    process.exit(0);
-  }
-
-  // Step 3: Read and validate state
   let state;
   try {
-    const raw = fs.readFileSync(STATE_FILE, 'utf8');
-    state = JSON.parse(raw);
+    state = loadState(stateFile);
   } catch (err) {
     process.stderr.write(`\u26A0\uFE0F  Code review loop: Failed to parse state file: ${err.message}\n`);
-    deleteStateFile();
-    process.exit(0);
+    clearState(stateFile);
+    return;
   }
 
-  // If loop is not active, allow exit
-  if (!state.active) {
-    process.exit(0);
-  }
+  if (!state.active) return;
 
   const iteration = typeof state.iteration === 'number' ? state.iteration : 0;
   const maxIterations = typeof state.max_iterations === 'number' ? state.max_iterations : 0;
-  const reviewPrompt = typeof state.prompt === 'string' ? state.prompt : '';
-  const model = typeof state.model === 'string' ? state.model : 'claude-opus-4-5';
 
-  // Step 3b: Check max iterations
   if (maxIterations > 0 && iteration >= maxIterations) {
-    process.stdout.write(
-      '\uD83D\uDED1 Code review loop: Max iterations reached.\n'
-    );
-    deleteStateFile();
-    process.exit(0);
+    process.stdout.write('\uD83D\uDED1 Code review loop: Max iterations reached.\n');
+    clearState(stateFile);
+    return;
   }
 
-  // Step 4: Extract last assistant message from transcript
-  const rawTranscriptPath = hookInput.transcript_path || '';
-
+  const rawTranscriptPath = input.transcript_path || '';
   if (!rawTranscriptPath) {
-    process.stderr.write(
-      '\u26A0\uFE0F  Code review loop: No transcript_path provided in hook input.\n' +
-      '   Code review loop is stopping.\n'
-    );
-    deleteStateFile();
-    process.exit(0);
+    process.stderr.write('\u26A0\uFE0F  Code review loop: No transcript_path in hook input. Stopping.\n');
+    clearState(stateFile);
+    return;
   }
 
-  const transcriptPath = path.resolve(rawTranscriptPath);
-
-  if (!path.isAbsolute(transcriptPath)) {
-    process.stderr.write(
-      `\u26A0\uFE0F  Code review loop: transcript_path is not an absolute path: ${rawTranscriptPath}\n` +
-      '   Code review loop is stopping.\n'
-    );
-    deleteStateFile();
-    process.exit(0);
-  }
-
+  const transcriptPath = path.resolve(expandTilde(rawTranscriptPath));
   if (!fs.existsSync(transcriptPath)) {
-    process.stderr.write(
-      `\u26A0\uFE0F  Code review loop: Transcript file not found: ${transcriptPath}\n` +
-      '   Code review loop is stopping.\n'
-    );
-    deleteStateFile();
-    process.exit(0);
+    process.stderr.write(`\u26A0\uFE0F  Code review loop: Transcript not found: ${transcriptPath}. Stopping.\n`);
+    clearState(stateFile);
+    return;
   }
 
-  const messageResult = extractLastAssistantMessage(transcriptPath);
-
-  if (messageResult.error) {
-    process.stderr.write(
-      `\u26A0\uFE0F  Code review loop: ${messageResult.error}\n` +
-      '   Code review loop is stopping.\n'
-    );
-    deleteStateFile();
-    process.exit(0);
+  let lastAssistantText;
+  try {
+    lastAssistantText = extractLastAssistantText(transcriptPath);
+  } catch (err) {
+    process.stderr.write(`\u26A0\uFE0F  Code review loop: ${err.message}. Stopping.\n`);
+    clearState(stateFile);
+    return;
   }
 
-  const lastAssistantText = messageResult.text;
-
-  // Step 5: Check for "Approval" signal (case-sensitive)
-  if (lastAssistantText.includes(APPROVAL_SIGNAL)) {
-    process.stdout.write(
-      '\u2705 Code review loop: Approval detected. Session complete.\n'
-    );
-    deleteStateFile();
-    process.exit(0);
+  if (APPROVAL_PATTERN.test(lastAssistantText)) {
+    process.stdout.write('\u2705 Code review loop: Approval detected. Session complete.\n');
+    clearState(stateFile);
+    return;
   }
 
-  // Step 6: Not approved — increment iteration and block the stop
+  // Not approved — increment iteration and block the stop
   const nextIteration = iteration + 1;
-  const newState = updateStateFile({ ...state, iteration: nextIteration });
+  saveState(stateFile, { ...state, iteration: nextIteration });
 
-  const systemMessage =
-    `\uD83D\uDD04 Code Review iteration ${nextIteration} | Reviewer has not yet issued Approval. ` +
-    'Continue addressing feedback.';
-
-  const blockOutput = {
-    decision: 'block',
-    reason: reviewPrompt,
-    systemMessage,
-  };
-
-  process.stdout.write(JSON.stringify(blockOutput, null, 2) + '\n');
-  process.exit(0);
+  process.stdout.write(
+    JSON.stringify({
+      decision: 'block',
+      reason: state.prompt ?? '',
+      systemMessage:
+        `\uD83D\uDD04 Code Review iteration ${nextIteration} | Reviewer has not yet issued Approval. ` +
+        'Continue addressing feedback.',
+    }, null, 2) + '\n'
+  );
 }
 
-main();
+main().catch((err) => {
+  process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+  process.exit(1);
+});

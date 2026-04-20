@@ -1,7 +1,7 @@
 ---
 name: cancel-review
 description: Cancel an active code review loop
-allowed-tools: ["Bash(test -f .claude/review-state.json:*)", "Bash(rm .claude/review-state.json)", "Read(.claude/review-state.json)"]
+allowed-tools: ["Bash(test -f .claude/review-state.json:*)", "Bash(rm .claude/review-state.json:*)", "Read(.claude/review-state.json)"]
 ---
 
 # Cancel Review
