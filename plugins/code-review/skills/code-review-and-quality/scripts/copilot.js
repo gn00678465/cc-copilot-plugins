@@ -1,163 +1,90 @@
-#!/usr/bin/env node
+import { spawn } from "node:child_process";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-'use strict';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-/**
- * Code Review Loop Initialization Script
- *
- * Starts a code-review session by writing state to .<mode>/review-state.json
- * and printing a mission start message.
- *
- * Usage:
- *   node copilot.js PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]
- *
- * PROMPT is positional — all non-flag words are joined as the prompt.
- * --mode determines the dot-directory: 'claude' → .claude, 'copilot' → .copilot (default: claude)
- */
+function resolvePluginPath() {
+    return resolve(__dirname, "..", "reference", "plugin");
+}
 
-const fs = require('fs');
-const path = require('path');
+function runCopilot(args) {
+    return new Promise((resolve, reject) => {
+        const pluginPath = resolvePluginPath();
+        const copilotProcess = spawn("copilot", [
+            '-p', args.prompt,
+            '--model', args.model,
+            '--plugin-dir', pluginPath,
+            '--allow-all-tools'
+        ],
+        {
+            // use pipe so we can capture stdout/stderr programmatically
+            stdio: "pipe",
+        });
 
-// ---------------------------------------------------------------------------
-// Defaults
-// ---------------------------------------------------------------------------
-const DEFAULT_MODEL = 'claude-opus-4-5';
-const DEFAULT_MAX_ITERATIONS = 5;
-const DEFAULT_MODE = 'claude';
+        let stdoutData = '';
+        let stderrData = '';
 
-// ---------------------------------------------------------------------------
-// Argument parsing
-// ---------------------------------------------------------------------------
-function parseArgs(argv) {
-  const args = argv.slice(2); // drop node + script path
-  const result = {
-    model: DEFAULT_MODEL,
-    maxIterations: DEFAULT_MAX_ITERATIONS,
-    mode: DEFAULT_MODE,
-    promptParts: [],
-  };
+        // 收集 stdout
+        if (copilotProcess.stdout) {
+            copilotProcess.stdout.on('data', (data) => {
+                stdoutData += data.toString();
+            });
+        }
 
-  let i = 0;
-  while (i < args.length) {
-    const arg = args[i];
+        // 收集 stderr (用於錯誤診斷)
+        if (copilotProcess.stderr) {
+            copilotProcess.stderr.on('data', (data) => {
+                stderrData += data.toString();
+            });
+        }
 
-    if (arg === '--model') {
-      if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
-        exitWithError('--model requires a value (e.g. --model claude-opus-4-5)');
-      }
-      result.model = args[i + 1];
-      i += 2;
-    } else if (arg === '--max-iterations') {
-      if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
-        exitWithError('--max-iterations requires a numeric value (e.g. --max-iterations 5)');
-      }
-      const n = parseInt(args[i + 1], 10);
-      if (isNaN(n) || n < 1) {
-        exitWithError(`--max-iterations must be a positive integer, got: ${args[i + 1]}`);
-      }
-      result.maxIterations = n;
-      i += 2;
-    } else if (arg === '--mode') {
-      if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
-        exitWithError("--mode requires a value: 'claude' or 'copilot'");
-      }
-      const m = args[i + 1].toLowerCase();
-      if (m !== 'claude' && m !== 'copilot') {
-        exitWithError(`--mode must be 'claude' or 'copilot', got: ${args[i + 1]}`);
-      }
-      result.mode = m;
-      i += 2;
-    } else {
-      // Positional argument — collect as part of the prompt
-      result.promptParts.push(arg);
-      i += 1;
+        // 監聽錯誤（如找不到命令）
+        copilotProcess.on('error', (err) => {
+            reject(err);
+        });
+
+        // 當進程結束時 resolve 或 reject
+        copilotProcess.on('close', (code) => {
+            if (code === 0) {
+                resolve(stdoutData.trim());
+            } else {
+                reject(new Error(`進程退出，代碼: ${code}\n錯誤訊息: ${stderrData}`));
+            }
+        });
+    })
+}
+
+// --- CLI entry for quick verification ---
+function parseCliArgs(argv) {
+    const out = {};
+    for (let i = 2; i < argv.length; i++) {
+        const a = argv[i];
+        if ((a === '--prompt' || a === '-p') && argv[i + 1]) {
+            out.prompt = argv[++i];
+        } else if ((a === '--model' || a === '-m') && argv[i + 1]) {
+            out.model = argv[++i];
+        } else if (a === '--help' || a === '-h') {
+            out.help = true;
+        }
     }
-  }
-
-  return {
-    model: result.model,
-    maxIterations: result.maxIterations,
-    mode: result.mode,
-    prompt: result.promptParts.join(' '),
-  };
+    return out;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function exitWithError(message) {
-  process.stderr.write(`\u274C Error: ${message}\n`);
-  process.exit(1);
+const cli = parseCliArgs(process.argv);
+if (cli.help) {
+    console.log('Usage: node copilot.js --prompt "your prompt" --model "gpt-5-mini"');
 }
 
-function findProjectRoot() {
-  let dir = process.cwd();
-  while (true) {
-    if (fs.existsSync(path.join(dir, '.git'))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) return process.cwd();
-    dir = parent;
-  }
+if (cli.prompt) {
+    runCopilot({ prompt: cli.prompt, model: cli.model || 'gpt-5-mini' })
+        .then((out) => {
+            if (out) console.log(out);
+            process.exit(0);
+        })
+        .catch((err) => {
+            console.error(err);
+            process.exit(1);
+        });
 }
-
-function writeStateFile(state, mode) {
-  const root = findProjectRoot();
-  const dotDir = path.join(root, `.${mode}`);
-  fs.mkdirSync(dotDir, { recursive: true });
-  const statePath = path.join(dotDir, 'review-state.json');
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf8');
-}
-
-function printMissionStart(opts) {
-  const { model, maxIterations, prompt, mode } = opts;
-
-  process.stdout.write(
-    [
-      '\uD83D\uDD0D Code Review Loop activated!',
-      '',
-      `Iteration: 1`,
-      `Max iterations: ${maxIterations}`,
-      `Model: ${model}`,
-      `Mode: ${mode} (.${mode}/)`,
-      '',
-      'The stop hook is now active. When you stop this session, the Reviewer',
-      'model will evaluate the code and either Approve or request changes.',
-      '',
-      '\u26A0\uFE0F  Loop exits when Reviewer outputs "> **Approval**" or max iterations reached.',
-      '',
-      '\uD83D\uDD0D',
-      '',
-      prompt,
-      '',
-    ].join('\n')
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-function main() {
-  const opts = parseArgs(process.argv);
-
-  if (!opts.prompt.trim()) {
-    exitWithError(
-      'A prompt is required. Provide the review context, e.g.:\n' +
-        '  /code-review-and-quality Review the staged changes for quality'
-    );
-  }
-
-  const state = {
-    active: true,
-    iteration: 1,
-    max_iterations: opts.maxIterations,
-    model: opts.model,
-    mode: opts.mode,
-    prompt: opts.prompt,
-    started_at: new Date().toISOString(),
-  };
-
-  writeStateFile(state, opts.mode);
-  printMissionStart(opts);
-}
-
-main();

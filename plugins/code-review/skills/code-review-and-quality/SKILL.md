@@ -2,7 +2,6 @@
 name: code-review-and-quality
 description: Conducts multi-axis code review using an automated review-fix loop. Use before merging any change. Use when reviewing code written by yourself, another agent, or a human.
 argument-hint: "PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]"
-allowed-tools: ["Bash(node ${CLAUDE_PLUGIN_ROOT}/skills/code-review-and-quality/scripts/copilot.js:*)", "Agent(code-review-and-quality:code-review-master:*)"]
 ---
 
 # Code Review and Quality
