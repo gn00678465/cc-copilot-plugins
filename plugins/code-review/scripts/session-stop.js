@@ -28,8 +28,8 @@ const os = require('os');
 // Constants
 // ---------------------------------------------------------------------------
 
-// Matches the exact Approval format from code-review-master agent: > **Approval**
-const APPROVAL_PATTERN = /(?:^|\n)\s*>\s*\*\*Approval\*\*\s*$/;
+// Matches <promise>APPROVAL</promise> emitted by the agent to signal completion
+const APPROVAL_PATTERN = /<promise>\s*APPROVAL\s*<\/promise>/i;
 
 // ---------------------------------------------------------------------------
 // Hook input
@@ -50,23 +50,58 @@ function resolveWorkspaceRoot(cwd) {
 }
 
 function resolveStateFile(workspaceRoot, dotDir) {
-  return path.join(workspaceRoot, dotDir, 'review-state.json');
+  return path.join(workspaceRoot, dotDir, 'code-review.local.md');
 }
 
 // ---------------------------------------------------------------------------
 // State I/O
 // ---------------------------------------------------------------------------
 
+function parseFrontmatter(raw) {
+  const lines = raw.split('\n');
+  if (lines[0].trim() !== '---') return { state: {}, body: raw };
+
+  const closeIdx = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
+  if (closeIdx === -1) return { state: {}, body: raw };
+
+  const state = {};
+  for (const line of lines.slice(1, closeIdx)) {
+    const colon = line.indexOf(':');
+    if (colon === -1) continue;
+    const key = line.slice(0, colon).trim();
+    let val = line.slice(colon + 1).trim();
+    if (val === 'true') state[key] = true;
+    else if (val === 'false') state[key] = false;
+    else if (/^-?\d+$/.test(val)) state[key] = parseInt(val, 10);
+    else state[key] = val.replace(/^["']|["']$/g, '');
+  }
+
+  const body = lines.slice(closeIdx + 1).join('\n').trim();
+  if (body) state.prompt = body;
+  return { state, body };
+}
+
+function serializeFrontmatter(state) {
+  const { prompt, ...fields } = state;
+  const lines = ['---'];
+  for (const [k, v] of Object.entries(fields)) {
+    if (typeof v === 'string') lines.push(`${k}: "${v}"`);
+    else lines.push(`${k}: ${v}`);
+  }
+  lines.push('---', '', prompt ?? '', '');
+  return lines.join('\n');
+}
+
 function loadState(stateFile) {
   const raw = fs.readFileSync(stateFile, 'utf8');
-  return JSON.parse(raw);
+  return parseFrontmatter(raw).state;
 }
 
 function saveState(stateFile, state) {
   const uniqueSuffix = Date.now() + Math.random().toString(36).slice(2);
   const tmpPath = `${stateFile}.tmp.${uniqueSuffix}`;
   try {
-    fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(tmpPath, serializeFrontmatter(state), 'utf8');
     fs.renameSync(tmpPath, stateFile);
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch (_) {}

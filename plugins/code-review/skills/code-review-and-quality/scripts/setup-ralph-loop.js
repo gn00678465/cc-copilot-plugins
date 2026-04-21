@@ -5,31 +5,64 @@
 /**
  * Code Review Loop Initialization Script
  *
- * Starts a code-review session by writing state to .<mode>/review-state.json
+ * Starts a code-review session by writing state to .<mode>/code-review.local.md
  * and printing a mission start message.
  *
  * Usage:
- *   node copilot.js PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]
+ *   node setup-ralph-loop.js PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]
  *
  * PROMPT is positional — all non-flag words are joined as the prompt.
  * --mode determines the dot-directory: 'claude' → .claude, 'copilot' → .copilot (default: claude)
+ * completion_promise is always fixed to "APPROVAL"
  */
 
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
-// ---------------------------------------------------------------------------
-// Defaults
-// ---------------------------------------------------------------------------
+const COMPLETION_PROMISE = 'APPROVAL';
 const DEFAULT_MODEL = 'gpt-5.4';
-const DEFAULT_MAX_ITERATIONS = 5;
+const DEFAULT_MAX_ITERATIONS = 0;
 const DEFAULT_MODE = 'claude';
 
-// ---------------------------------------------------------------------------
-// Argument parsing
-// ---------------------------------------------------------------------------
+const HELP_TEXT = `Code Review Loop - Iterative review loop with Approval gate
+
+USAGE:
+  /code-review-and-quality [PROMPT...] [OPTIONS]
+
+ARGUMENTS:
+  PROMPT...    Review context / task description (can be multiple words without quotes)
+
+OPTIONS:
+  --max-iterations <n>   Maximum iterations before auto-stop (0 = unlimited, default: 0)
+  --model <name>         Model name to record in state (default: ${DEFAULT_MODEL})
+  --mode claude|copilot  Dot-directory to use (default: claude)
+  -h, --help             Show this help message
+
+DESCRIPTION:
+  Starts a code-review loop in the current session. The stop hook prevents
+  exit and feeds output back as input until the reviewer approves or the
+  iteration limit is reached.
+
+  To signal completion, output this EXACT tag:
+    <promise>${COMPLETION_PROMISE}</promise>
+
+EXAMPLES:
+  /code-review-and-quality Review the staged changes for quality
+  /code-review-and-quality Fix auth bug --max-iterations 10
+  /code-review-and-quality Refactor cache layer --mode copilot
+
+MONITORING:
+  head -10 .claude/code-review.local.md
+`;
+
+function exitWithError(message) {
+  process.stderr.write(`❌ Error: ${message}\n`);
+  process.exit(1);
+}
+
 function parseArgs(argv) {
-  const args = argv.slice(2); // drop node + script path
+  const args = argv.slice(2);
   const result = {
     model: DEFAULT_MODEL,
     maxIterations: DEFAULT_MAX_ITERATIONS,
@@ -41,7 +74,10 @@ function parseArgs(argv) {
   while (i < args.length) {
     const arg = args[i];
 
-    if (arg === '--model') {
+    if (arg === '-h' || arg === '--help') {
+      process.stdout.write(HELP_TEXT);
+      process.exit(0);
+    } else if (arg === '--model') {
       if (i + 1 >= args.length || args[i + 1].startsWith('--')) {
         exitWithError('--model requires a value (e.g. --model gpt-5.4)');
       }
@@ -52,8 +88,8 @@ function parseArgs(argv) {
         exitWithError('--max-iterations requires a numeric value (e.g. --max-iterations 5)');
       }
       const n = parseInt(args[i + 1], 10);
-      if (isNaN(n) || n < 1) {
-        exitWithError(`--max-iterations must be a positive integer, got: ${args[i + 1]}`);
+      if (isNaN(n) || n < 0) {
+        exitWithError(`--max-iterations must be a non-negative integer, got: ${args[i + 1]}`);
       }
       result.maxIterations = n;
       i += 2;
@@ -68,7 +104,6 @@ function parseArgs(argv) {
       result.mode = m;
       i += 2;
     } else {
-      // Positional argument — collect as part of the prompt
       result.promptParts.push(arg);
       i += 1;
     }
@@ -82,14 +117,6 @@ function parseArgs(argv) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function exitWithError(message) {
-  process.stderr.write(`\u274C Error: ${message}\n`);
-  process.exit(1);
-}
-
 function findProjectRoot() {
   let dir = process.cwd();
   while (true) {
@@ -100,43 +127,97 @@ function findProjectRoot() {
   }
 }
 
-function writeStateFile(state, mode) {
+function writeStateFile(opts) {
+  const { maxIterations, mode, prompt } = opts;
   const root = findProjectRoot();
   const dotDir = path.join(root, `.${mode}`);
   fs.mkdirSync(dotDir, { recursive: true });
-  const statePath = path.join(dotDir, 'review-state.json');
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf8');
+
+  const startedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const frontmatter = [
+    '---',
+    'active: true',
+    'iteration: 1',
+    `max_iterations: ${maxIterations}`,
+    `completion_promise: "${COMPLETION_PROMISE}"`,
+    `started_at: "${startedAt}"`,
+    '---',
+    '',
+    prompt,
+    '',
+  ].join('\n');
+
+  const statePath = path.join(dotDir, 'code-review.local.md');
+  fs.writeFileSync(statePath, frontmatter, 'utf8');
+  return statePath;
 }
 
 function printMissionStart(opts) {
   const { model, maxIterations, prompt, mode } = opts;
+  const iterLabel = maxIterations > 0 ? String(maxIterations) : 'unlimited';
 
   process.stdout.write(
     [
-      '\uD83D\uDD0D Code Review Loop activated!',
+      '🔄 Code Review Loop activated in this session!',
       '',
       `Iteration: 1`,
-      `Max iterations: ${maxIterations}`,
+      `Max iterations: ${iterLabel}`,
       `Model: ${model}`,
       `Mode: ${mode} (.${mode}/)`,
+      `Completion promise: ${COMPLETION_PROMISE} (ONLY output when TRUE - do not lie!)`,
       '',
-      'The stop hook is now active. When you stop this session, the Reviewer',
-      'model will evaluate the code and either Approve or request changes.',
+      'The stop hook is now active. When you try to exit, the SAME PROMPT will be',
+      'fed back to you until the Reviewer outputs the Approval tag or iterations run out.',
       '',
-      '\u26A0\uFE0F  Loop exits when Reviewer outputs "> **Approval**" or max iterations reached.',
+      `To monitor: head -10 .${mode}/code-review.local.md`,
       '',
-      '\uD83D\uDD0D',
+      '⚠️  WARNING: This loop cannot be stopped manually! It will run infinitely',
+      '    unless you set --max-iterations.',
+      '',
+      '🔄',
       '',
       prompt,
+      '',
+      '═'.repeat(63),
+      'CRITICAL - Code Review Loop Completion Promise',
+      '═'.repeat(63),
+      '',
+      'To complete this loop, output this EXACT text:',
+      `  <promise>${COMPLETION_PROMISE}</promise>`,
+      '',
+      'STRICT REQUIREMENTS (DO NOT VIOLATE):',
+      '  ✓ Use <promise> XML tags EXACTLY as shown above',
+      '  ✓ The statement MUST be completely and unequivocally TRUE',
+      '  ✓ Do NOT output false statements to exit the loop',
+      '  ✓ Do NOT lie even if you think you should exit',
+      '',
+      'IMPORTANT - Do not circumvent the loop:',
+      '  Even if you believe you\'re stuck or the task is impossible,',
+      '  you MUST NOT output a false promise statement. The loop is',
+      '  designed to continue until the promise is GENUINELY TRUE.',
+      '═'.repeat(63),
       '',
     ].join('\n')
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-function main() {
+function runCopilotScript(opts) {
+  return new Promise((resolve, reject) => {
+    const copilotScript = path.join(__dirname, 'copilot.js');
+    const child = spawn(
+      process.execPath,
+      [copilotScript, '--prompt', opts.prompt, '--model', opts.model],
+      { stdio: 'inherit' }
+    );
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`copilot.js exited with code ${code}`));
+    });
+  });
+}
+
+async function main() {
   const opts = parseArgs(process.argv);
 
   if (!opts.prompt.trim()) {
@@ -146,18 +227,14 @@ function main() {
     );
   }
 
-  const state = {
-    active: true,
-    iteration: 1,
-    max_iterations: opts.maxIterations,
-    model: opts.model,
-    mode: opts.mode,
-    prompt: opts.prompt,
-    started_at: new Date().toISOString(),
-  };
-
-  writeStateFile(state, opts.mode);
+  writeStateFile(opts);
   printMissionStart(opts);
+
+  try {
+    await runCopilotScript(opts);
+  } catch (err) {
+    exitWithError(`copilot.js failed: ${err.message}`);
+  }
 }
 
 main();

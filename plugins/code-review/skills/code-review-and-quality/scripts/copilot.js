@@ -1,9 +1,7 @@
-import { spawn } from "node:child_process";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+'use strict';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const { spawn } = require('child_process');
+const { resolve } = require('path');
 
 function resolvePluginPath() {
     return resolve(__dirname, "..", "reference", "plugin");

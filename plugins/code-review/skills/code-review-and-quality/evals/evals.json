@@ -3,61 +3,101 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Use copilot with --plugin-dir plugins/code-review and verify which skills are loaded. Run: copilot --plugin-dir plugins/code-review -p 'List all available skills from the loaded plugin' --allow-all-tools",
-      "expected_output": "The session recognizes both 'cancel-review' and 'code-review-and-quality' as available skills from the plugin.",
+      "prompt": "Run the code-review-and-quality skill with the prompt 'review staged changes for quality' and --max-iterations 3. Specifically: execute node plugins/code-review/skills/code-review-and-quality/scripts/setup-ralph-loop.js 'review staged changes for quality' --max-iterations 3 --model gpt-5-mini in the project root. Capture stdout. Verify the startup banner is printed and check that the .claude/code-review.local.md file was created.",
+      "expected_output": "Startup banner printed with 'Code Review Loop activated'. .claude/code-review.local.md exists with active:true, iteration:1, max_iterations:3, completion_promise:APPROVAL in YAML frontmatter.",
       "files": [],
       "assertions": [
         {
-          "name": "cancel_review_skill_present",
-          "description": "Output lists 'cancel-review' as an available skill"
+          "name": "startup_banner_printed",
+          "description": "stdout contains 'Code Review Loop activated in this session!'"
         },
         {
-          "name": "code_review_and_quality_skill_present",
-          "description": "Output lists 'code-review-and-quality' as an available skill"
+          "name": "state_file_created",
+          "description": ".claude/code-review.local.md exists after running the script"
+        },
+        {
+          "name": "state_file_has_correct_fields",
+          "description": "code-review.local.md frontmatter contains active:true, iteration:1, max_iterations:3, completion_promise:APPROVAL"
+        },
+        {
+          "name": "prompt_in_state_file",
+          "description": "code-review.local.md body contains the prompt text 'review staged changes for quality'"
         }
       ]
     },
     {
       "id": 2,
-      "prompt": "Start copilot with --plugin-dir plugins/code-review, then invoke '/code-review-and-quality Review the following change: a new function parseArgs() was added to utils.js that splits a string on commas'. Verify that the correct internal skill is used and the review follows the five-axis framework.",
-      "expected_output": "copilot.js runs and creates .claude/review-state.json. The review uses Critical/Important/Suggestion/Nit categories and ends with Approval or a required-changes list.",
+      "prompt": "Test session-stop.js APPROVAL exit path. Steps: (1) Create .claude/code-review.local.md with frontmatter: active:true, iteration:1, max_iterations:3, completion_promise:APPROVAL, prompt:'review staged changes'. (2) Create a mock transcript JSONL at /tmp/mock-transcript.jsonl where the last assistant message content contains '<promise>APPROVAL</promise>'. (3) Run: echo '{\"transcript_path\":\"/tmp/mock-transcript.jsonl\",\"cwd\":\"<project_root>\"}' | node plugins/code-review/scripts/session-stop.js. (4) Check: exit code 0, stdout does NOT contain decision:block, and .claude/code-review.local.md has been deleted.",
+      "expected_output": "exit code 0, no block JSON in stdout, .claude/code-review.local.md deleted (APPROVAL detected → session complete).",
       "files": [],
       "assertions": [
         {
-          "name": "state_file_created",
-          "description": ".claude/review-state.json is created with active=true and the review prompt"
+          "name": "exit_code_zero",
+          "description": "session-stop.js exits with code 0 when APPROVAL is present"
         },
         {
-          "name": "findings_categorized",
-          "description": "Review output uses at least one of: Critical, Important, Suggestion, Nit"
+          "name": "no_block_decision",
+          "description": "stdout does not contain 'decision' or contains '✅' approval message, not a block JSON"
         },
         {
-          "name": "verdict_present",
-          "description": "Review output ends with 'Approval' or an explicit list of required changes"
+          "name": "state_file_deleted",
+          "description": ".claude/code-review.local.md is deleted after APPROVAL is detected"
         }
       ]
     },
     {
       "id": 3,
-      "prompt": "Test the stop hook loop control by running session-stop.js in two scenarios: (A) state file active + transcript containing 'Approval' should allow exit; (B) state file active + transcript without 'Approval' should block exit with iteration incremented. Use: node plugins/code-review/scripts/session-stop.js with prepared state and transcript files.",
-      "expected_output": "Scenario A: exit code 0, no block JSON, state file deleted. Scenario B: block decision JSON with decision='block', iteration incremented. Scenario C: max_iterations reached allows exit.",
+      "prompt": "Test session-stop.js loop-block path (no APPROVAL). Steps: (1) Create .claude/code-review.local.md with frontmatter: active:true, iteration:1, max_iterations:3, completion_promise:APPROVAL, prompt:'review staged changes'. (2) Create a mock transcript JSONL at /tmp/mock-transcript-no-approval.jsonl where the last assistant message content does NOT contain '<promise>APPROVAL</promise>' (e.g. just says 'I reviewed the code and found issues.'). (3) Run: echo '{\"transcript_path\":\"/tmp/mock-transcript-no-approval.jsonl\",\"cwd\":\"<project_root>\"}' | node plugins/code-review/scripts/session-stop.js. (4) Check: stdout is valid JSON with decision='block', and re-read .claude/code-review.local.md to verify iteration is now 2.",
+      "expected_output": "stdout is JSON with decision:'block'. .claude/code-review.local.md still exists with iteration:2 (incremented from 1).",
       "files": [],
       "assertions": [
         {
-          "name": "approval_allows_exit",
-          "description": "When transcript contains 'Approval': exit code 0, no block JSON output, state file deleted"
+          "name": "block_decision_emitted",
+          "description": "stdout is valid JSON containing decision:'block'"
         },
         {
-          "name": "no_approval_blocks_exit",
-          "description": "When transcript lacks 'Approval': stdout is valid JSON with decision='block'"
+          "name": "iteration_incremented",
+          "description": ".claude/code-review.local.md frontmatter shows iteration:2 after the hook runs"
         },
         {
-          "name": "iteration_incremented_on_block",
-          "description": "When blocked: state file is updated with iteration incremented by 1"
+          "name": "state_file_still_exists",
+          "description": ".claude/code-review.local.md still exists (was not deleted)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Verify .claude/code-review.local.md is generated with correct YAML frontmatter by running: node plugins/code-review/skills/code-review-and-quality/scripts/setup-ralph-loop.js 'check for security issues' --max-iterations 5 --model gpt-5-mini. Then read .claude/code-review.local.md and verify all required YAML frontmatter fields are present and have correct types/values.",
+      "expected_output": ".claude/code-review.local.md exists and contains YAML frontmatter with: active:true (boolean), iteration:1 (integer), max_iterations:5 (integer), completion_promise:APPROVAL (string), started_at (ISO timestamp string), and body text containing 'check for security issues'.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "file_exists",
+          "description": ".claude/code-review.local.md exists"
         },
         {
-          "name": "max_iterations_allows_exit",
-          "description": "When state.iteration >= state.max_iterations: exit code 0, state file deleted"
+          "name": "yaml_frontmatter_valid",
+          "description": "File starts with --- and has a closing --- delimiter"
+        },
+        {
+          "name": "active_true",
+          "description": "frontmatter contains 'active: true'"
+        },
+        {
+          "name": "iteration_one",
+          "description": "frontmatter contains 'iteration: 1'"
+        },
+        {
+          "name": "max_iterations_five",
+          "description": "frontmatter contains 'max_iterations: 5'"
+        },
+        {
+          "name": "completion_promise_approval",
+          "description": "frontmatter contains 'completion_promise: \"APPROVAL\"'"
+        },
+        {
+          "name": "prompt_in_body",
+          "description": "File body after closing --- contains 'check for security issues'"
         }
       ]
     }

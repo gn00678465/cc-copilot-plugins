@@ -9,12 +9,10 @@ argument-hint: "PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|
 Execute the setup script to initialize the code review loop:
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/skills/code-review-and-quality/scripts/copilot.js" $ARGUMENTS
+node "code-review-and-quality/scripts/setup-ralph-loop.js" $ARGUMENTS
 ```
 
-Use the **Agent** tool to dispatch the `code-review-master` subagent:
-- `subagent_type`: `code-review-and-quality:code-review-master`
-- `prompt`: the full review context — what changed, why, and any specific concerns
+Please work on the task. When you try to exit, the Ralph loop will feed the SAME PROMPT back to you for the next iteration. You'll see your previous work in files and git history, allowing you to iterate and improve.
 
 The subagent will conduct a five-axis review (correctness, readability, architecture, security, performance) and issue `> **Approval**` only when all Critical and Important findings are resolved.
 
