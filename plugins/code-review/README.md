@@ -28,14 +28,14 @@ Install the plugin via Claude Code:
 
 ## Skills
 
-### `/code-review-and-quality`
+### `/code-review-loop`
 
 Starts an automated review-fix loop.
 
 **Syntax**
 
 ```
-/code-review-and-quality PROMPT [--max-iterations N] [--model MODEL] [--mode claude|copilot]
+/code-review-loop PROMPT [--max-iterations N] [--model MODEL] [--mode claude|copilot]
 ```
 
 | Option | Default | Description |
@@ -48,14 +48,14 @@ Starts an automated review-fix loop.
 **Examples**
 
 ```
-/code-review-and-quality Review the staged changes for quality
-/code-review-and-quality Review the auth module for security issues --max-iterations 5
-/code-review-and-quality Refactor cache layer --model gpt-5-mini --max-iterations 10
+/code-review-loop Review the staged changes for quality
+/code-review-loop Review the auth module for security issues --max-iterations 5
+/code-review-loop Refactor cache layer --model gpt-5-mini --max-iterations 10
 ```
 
 **How the loop works**
 
-1. `setup-ralph-loop.js` writes session state to `.claude/code-review.local.md` and prints the startup banner.
+1. `reviewer.js` writes session state to `.claude/code-review.local.md` and prints the startup banner.
 2. The Copilot CLI subagent (`copilot.js`) runs with your prompt and the internal review plugin, conducting a five-axis review (correctness, readability, architecture, security, performance).
 3. When you try to exit, the Stop hook (`session-stop.js`) intercepts:
    - If the reviewer output contains `<promise>APPROVAL</promise>` → session ends cleanly.

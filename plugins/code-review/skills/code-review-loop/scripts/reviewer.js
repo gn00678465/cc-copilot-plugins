@@ -9,7 +9,7 @@
  * and printing a mission start message.
  *
  * Usage:
- *   node setup-ralph-loop.js PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]
+ *   node reviewer.js PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]
  *
  * PROMPT is positional — all non-flag words are joined as the prompt.
  * --mode determines the dot-directory: 'claude' → .claude, 'copilot' → .copilot (default: claude)
@@ -28,7 +28,7 @@ const DEFAULT_MODE = 'claude';
 const HELP_TEXT = `Code Review Loop - Iterative review loop with Approval gate
 
 USAGE:
-  /code-review-and-quality [PROMPT...] [OPTIONS]
+  /code-review-loop [PROMPT...] [OPTIONS]
 
 ARGUMENTS:
   PROMPT...    Review context / task description (can be multiple words without quotes)
@@ -48,9 +48,9 @@ DESCRIPTION:
     <promise>${COMPLETION_PROMISE}</promise>
 
 EXAMPLES:
-  /code-review-and-quality Review the staged changes for quality
-  /code-review-and-quality Fix auth bug --max-iterations 10
-  /code-review-and-quality Refactor cache layer --mode copilot
+  /code-review-loop Review the staged changes for quality
+  /code-review-loop Fix auth bug --max-iterations 10
+  /code-review-loop Refactor cache layer --mode copilot
 
 MONITORING:
   head -10 .claude/code-review.local.md
