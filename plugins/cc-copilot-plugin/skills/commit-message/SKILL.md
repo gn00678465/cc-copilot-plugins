@@ -20,7 +20,7 @@ description: 分析 git staged changes 並根據 Conventional Commits (1.0.0-bet
 
 ### 語言
 
-- **描述、正文必須使用繁體中文**（台灣慣用技術詞彙，見下方「常用技術詞彙對照」）
+- **描述、正文必須使用繁體中文**（台灣慣用技術詞彙對照見 `references/terminology.md`）
 
 ### 描述（Subject）
 
@@ -216,33 +216,11 @@ fix(cart): 修正購物車金額計算錯誤
 - 變更過於複雜時，優先拆分為多個獨立 commit。
 - 當提交符合一或多種提交類型時，應盡可能切成多個提交。
 
-## 常用技術詞彙對照
-
-| 英文 | 繁體中文（台灣慣用） |
-|------|---------------------|
-| package | 套件 |
-| config/configuration | 設定 |
-| script | 腳本 |
-| dependency | 相依性 |
-| component | 元件 |
-| module | 模組 |
-| function | 函式 |
-| variable | 變數 |
-| parameter | 參數 |
-| implement | 實作 |
-| initialize | 初始化 |
-| optimize | 優化 |
-| refactor | 重構 |
-| validate | 驗證 |
-| authentication | 認證 |
-| authorization | 授權 |
-| bug | 臭蟲 |
-| pull request | 拉取請求 |
-
 ## 參考資料
 
 - `references/conventional-commits-spec.md` - 慣例式提交 1.0.0-beta.4 完整規範
 - `references/examples.md` - 各類型 commit message 範例集
+- `references/terminology.md` - 繁體中文（台灣慣用）技術詞彙對照
 - [Conventional Commits 官方網站](https://www.conventionalcommits.org/zh-hant/v1.0.0-beta.4/)
 - [SemVer 語意化版本](https://semver.org/lang/zh-TW/)
 - [@commitlint/config-conventional](https://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional)
