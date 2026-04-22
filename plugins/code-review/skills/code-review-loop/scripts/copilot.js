@@ -15,7 +15,8 @@ function runCopilot(args) {
             '--model', args.model,
             '--plugin-dir', pluginPath,
             '--allow-all-tools',
-            '--yolo'
+            '--yolo',
+            "--silent"
         ],
         {
             // use pipe so we can capture stdout/stderr programmatically

@@ -18,7 +18,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
+
+function getInitialHead() {
+  try {
+    return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+  } catch (_) {
+    return null;
+  }
+}
 
 const COMPLETION_PROMISE = 'APPROVAL';
 const DEFAULT_MODEL = 'gpt-5.4';
@@ -134,6 +142,7 @@ function writeStateFile(opts) {
   fs.mkdirSync(dotDir, { recursive: true });
 
   const startedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const initialHead = getInitialHead();
   const frontmatter = [
     '---',
     'active: true',
@@ -141,6 +150,9 @@ function writeStateFile(opts) {
     `max_iterations: ${maxIterations}`,
     `completion_promise: "${COMPLETION_PROMISE}"`,
     `started_at: "${startedAt}"`,
+    'base_revision: null',
+    'head_sha: null',
+    `initial_head: ${initialHead ? `"${initialHead}"` : 'null'}`,
     '---',
     '',
     prompt,
@@ -166,8 +178,9 @@ function printMissionStart(opts) {
       `Mode: ${mode} (.${mode}/)`,
       `Completion promise: ${COMPLETION_PROMISE} (ONLY output when TRUE - do not lie!)`,
       '',
-      'The stop hook is now active. When you try to exit, the SAME PROMPT will be',
-      'fed back to you until the Reviewer outputs the Approval tag or iterations run out.',
+      'The stop hook is now active. On the first exit the original prompt is replayed.',
+      'Subsequent iterations receive a git diff range review prompt focused on changes',
+      'since the previous iteration. The loop continues until Approval or max iterations.',
       '',
       `To monitor: head -10 .${mode}/code-review.local.md`,
       '',
