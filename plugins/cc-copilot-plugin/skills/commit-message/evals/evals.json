@@ -5,13 +5,55 @@
       "id": 0,
       "name": "simple-feat",
       "prompt": "我新增了一個登入頁面元件 `src/components/Login.tsx`，請幫我寫 commit message 並執行。",
-      "expected_output": "應包含 feat 類型，並建議將訊息寫入 .git/COMMIT_EDITMSG，最後執行 git commit -F"
+      "expected_output": "應識別為 feat 類型，生成單行（Score < 4）或含簡短 body 的 commit message，寫入 .git/COMMIT_EDITMSG，最後輸出 git commit -F .git/COMMIT_EDITMSG 指令並詢問是否執行。"
     },
     {
       "id": 1,
       "name": "complex-refactor",
       "prompt": "我重構了 `src/auth.ts` 的認證邏輯，並更新了 `package.json` 的版本。變更較多，請幫我分析。",
-      "expected_output": "應識別為重構或混合變更，建議詳細的 body，並使用 -F 提交模式"
+      "expected_output": "應觸發 Score >= 4 的詳細模式（因涉及 auth 關鍵字加 3 分），生成包含 body 的 commit message，type 為 refactor 且 scope 為 auth。"
+    },
+    {
+      "id": 2,
+      "name": "main-branch-protection",
+      "prompt": "（當前分支為 main，staged 了一個新功能檔案）請幫我寫 commit message。",
+      "expected_output": "偵測到 is_main=true 時應停止提交流程，依 suggested_branches 建議新分支名稱（如 feat/<keyword>），並回報錯誤訊息要求使用者先切換分支。不應產生任何 commit message。"
+    },
+    {
+      "id": 3,
+      "name": "lock-file-only",
+      "prompt": "我執行了 `pnpm install` 更新了 `pnpm-lock.yaml`，請幫我提交。",
+      "expected_output": "應識別 pnpm-lock.yaml 為 lock 檔案（risk_factors 包含 'Lock 檔案'），type 應為 build，commit message 類似 'build: 更新相依性鎖定檔'。"
+    },
+    {
+      "id": 4,
+      "name": "breaking-change",
+      "prompt": "我把 `src/api/auth.ts` 的認證介面從 session-based 改為 OAuth 2.0，舊端點完全移除，所有 client 必須更新。請幫我寫 commit。",
+      "expected_output": "應偵測為破壞性變更，commit message 需符合以下其一：(a) 類型後加 `!`（如 `feat(auth)!:`）且頁腳含 `BREAKING CHANGE: <描述>`；(b) 僅於頁腳標示 `BREAKING CHANGE:`。BREAKING CHANGE 必須為大寫。"
+    },
+    {
+      "id": 5,
+      "name": "rename-only-refactor",
+      "prompt": "我把 `src/utils/helper.ts` 重新命名為 `src/utils/string-helper.ts`，沒有修改內容。請幫我提交。",
+      "expected_output": "應識別 files.renamed 不為空且 new/modified 為空，primary type 應為 refactor，commit message 類似 `refactor(utils): 重新命名 helper 為 string-helper`。"
+    },
+    {
+      "id": 6,
+      "name": "atomic-split-high-score",
+      "prompt": "我同時重構了 `src/auth.ts`、`src/security.ts`，並更新了 `pnpm-lock.yaml` 以及 `migrations/001_add_users.sql`。請幫我寫 commit。",
+      "expected_output": "Score 應 > 8（auth +3、db +3、lock file +5），且橫跨 refactor/build/chore 多種類型。應進入原子化拆分流程（步驟 4），輸出多組 git reset + git add + commit message 指令，不應產出單一 commit message。"
+    },
+    {
+      "id": 7,
+      "name": "test-file-only",
+      "prompt": "我新增了 `src/auth/__tests__/login.test.ts` 的單元測試檔案，請幫我提交。",
+      "expected_output": "files.new 為測試檔案 (*.test.*)，type 應為 test 而非 feat。commit message 類似 `test(auth): 新增登入流程單元測試`。"
+    },
+    {
+      "id": 8,
+      "name": "docs-only",
+      "prompt": "我更新了 `README.md` 與 `docs/api.md` 的說明文件，請幫我提交。",
+      "expected_output": "files.modified 僅為 .md 文件，type 應為 docs。commit message 類似 `docs: 更新 API 使用說明`。"
     }
   ]
 }

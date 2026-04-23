@@ -2,7 +2,7 @@
     "name": "cc-copilot-plugins",
     "metadata": {
         "description": "Marketplace registry for Claude Code & GitHub Copilot workflow plugins",
-        "version": "0.1.0"
+        "version": "0.1.2"
     },
     "owner": {
         "name": "gn00678465",
