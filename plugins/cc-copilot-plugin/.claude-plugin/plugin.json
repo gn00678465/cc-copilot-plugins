@@ -1,6 +1,6 @@
 {
     "name": "cc-copilot-plugin",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "Claude Code & GitHub Copilot plugin bundle for commit and pull request workflows",
     "author": {
         "name": "gn00678465",
