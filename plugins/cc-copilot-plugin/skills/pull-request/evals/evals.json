@@ -9,33 +9,69 @@
     },
     {
       "id": 2,
-      "name": "security-focused-review",
-      "prompt": "Review PR #456。這是一個搜尋功能，代碼中直接將 `req.query.q` 拼接到 SQL 字串中，且前端使用 `v-html` 渲染搜尋結果。請產出審查報告。",
-      "expected_output": "報告必須以 Critical 等級指出 SQL Injection 與 XSS 漏洞，並提供正確的參數化查詢範例。"
+      "name": "multi-layer-feature-pr",
+      "prompt": "建立一個大型 PR。包含：1. 新增 `orders` 資料表 migration, 2. 新增 `/api/orders` 端點, 3. 前端訂單列表頁面。目標分支為 `develop`。",
+      "expected_output": "描述應自動分類「修改內容」：資料庫、API、前端，並在風險評估中正確識別 Migration 風險；應動態偵測 base branch 而非硬編 origin/main。"
     },
     {
       "id": 3,
-      "name": "multi-layer-feature-pr",
-      "prompt": "建立一個大型 PR。包含：1. 新增 `orders` 資料表 migration, 2. 新增 `/api/orders` 端點, 3. 前端訂單列表頁面。目標分支為 `develop`。",
-      "expected_output": "描述應自動分類「修改內容」：資料庫、API、前端，並在風險評估中正確識別 Migration 風險。"
+      "name": "edit-existing-pr-title-body",
+      "prompt": "PR #789 已存在。請幫我把標題改為 `refactor: 優化訂單查詢邏輯`，並同時改描述說明改動範圍。",
+      "expected_output": "應使用 `gh api -X PATCH repos/:owner/:repo/pulls/789` 搭配 `-f title=<新標題>` 與 `-f body=@pr-body.md`（檔案模式，避免 shell 展開中文）；若標題含中文且終端機非 UTF-8，標題亦走 `-f title=@pr-title.txt`。不應使用 `gh pr edit --title/--body`。執行後刪除 pr-body.md / pr-title.txt。"
     },
     {
       "id": 4,
-      "name": "edit-existing-pr-workflow",
-      "prompt": "PR #789 已存在。請幫我把標題改為 `refactor: 優化訂單查詢邏輯`，並新增 `priority:high` 與 `backend` 標籤，同時指定 @senior-dev 為審核者。",
-      "expected_output": "應正確產生 `gh pr edit` 指令組合，包含 --title, --add-label 與 --add-reviewer。"
+      "name": "edit-labels-and-reviewers",
+      "prompt": "PR #789 已存在。新增 `priority:high` 與 `backend` 標籤，同時指定 @senior-dev 為審核者。",
+      "expected_output": "應使用 `gh pr edit 789 --add-label` 與 `--add-reviewer`；若錯誤訊息指向 Projects，改走 `gh api -X POST repos/:owner/:repo/issues/789/labels` 與 `.../requested_reviewers`。"
     },
     {
       "id": 5,
-      "name": "review-clarity-pass",
-      "prompt": "Review 一段邏輯極其複雜、巢狀深達 5 層的程式碼。雖然功能正確，但難以維護。請產出報告。",
-      "expected_output": "報告應在「程式碼清晰度」面向提出「早回傳 (Early Returns)」的建議，並解釋其對維護性的價值。"
-    },
-    {
-      "id": 6,
       "name": "change-type-checkbox-auto-select",
       "prompt": "建立 PR。Commits 包含：`feat(auth): Add OAuth login`、`docs: Update README` 以及 `test: Add unit tests for auth`。",
       "expected_output": "描述中的變更類型 checkboxes 應自動勾選「新增功能 (feat)」、「文件 (docs)」與「測試 (tests)」，其餘項目維持未勾選。"
+    },
+    {
+      "id": 6,
+      "name": "preflight-blocks-on-dirty-tree",
+      "prompt": "幫我建立 PR。（當下 git status --porcelain 輸出含未暫存檔案）",
+      "expected_output": "應停止建立 PR 流程並提示使用者先執行 `cc-copilot-plugin:commit-message` skill 完成提交，不得直接呼叫 `gh pr create`。"
+    },
+    {
+      "id": 7,
+      "name": "default-branch-detection-on-master-repo",
+      "prompt": "建立 PR。（此 repo 使用 master 作為預設分支，非 main）",
+      "expected_output": "應透過 `gh repo view --json defaultBranchRef` 取得 `master`，後續 `git log`/`git diff` 皆以 `origin/master..HEAD` 為比較基準。"
+    },
+    {
+      "id": 8,
+      "name": "reject-review-request",
+      "prompt": "幫我 review PR #456 的程式碼，檢查有沒有安全問題。",
+      "expected_output": "不應進入審查流程。應回覆本 skill 不處理 code review，並建議使用獨立的 PR review skill。"
+    },
+    {
+      "id": 9,
+      "name": "negative-trigger-plain-git-push",
+      "prompt": "幫我 git push 到 origin。",
+      "expected_output": "不應啟動 pull-request skill；若已啟動，應回退並說明此請求屬於純 git 操作，非 PR 生命週期管理範圍。"
+    },
+    {
+      "id": 10,
+      "name": "pii-redaction",
+      "prompt": "建立 PR：修好了 ACME Corp 客戶 (john.doe@acme.com) 在 support ticket #9999 回報的 dashboard 崩潰問題。",
+      "expected_output": "PR 描述不得出現 `ACME Corp`、`john.doe@acme.com`、support ticket 原文；應僅描述技術症狀（例：「修復使用者載入儀表板時的 null pointer 崩潰」），並可用內部單號如 `Refs INTERNAL-9999` 連結。"
+    },
+    {
+      "id": 11,
+      "name": "zhtw-body-no-shell-expansion",
+      "prompt": "建立一個繁體中文描述的 PR，描述內容約 30 行，包含「摘要」「修改內容」「Why」等段落。",
+      "expected_output": "建立時必須使用 `gh pr create --body-file pr-body.md`；不得使用 `--body \"$(cat pr-body.md)\"`、heredoc 內嵌中文或任何 shell 展開中文字串的模式。pr-body.md 須為 UTF-8 無 BOM。"
+    },
+    {
+      "id": 12,
+      "name": "zhtw-edit-uses-at-file",
+      "prompt": "PR #42 已存在，請把描述改成一段繁體中文的變更說明（約 20 行）。",
+      "expected_output": "必須使用 `gh api -X PATCH repos/:owner/:repo/pulls/42 -f body=@pr-body.md`；不得使用 `-f body=\"$(cat pr-body.md)\"` 或在指令列直接內嵌中文字串。完成後刪除 pr-body.md。"
     }
   ]
 }

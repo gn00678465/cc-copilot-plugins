@@ -23,13 +23,15 @@
 | commits ≤ 2 **且** 變更檔案 ≤ 10 | 精簡版 |
 | 其餘情況 | 完整版 |
 
-判斷方式：
+判斷方式（先動態偵測預設分支，避免硬編 `main`）：
 ```bash
+BASE=$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')
+
 # commit 數
-git log origin/main..HEAD --oneline | wc -l
+git log "origin/$BASE..HEAD" --oneline | wc -l
 
 # 變更檔案數
-git diff --name-only origin/main..HEAD | wc -l
+git diff --name-only "origin/$BASE..HEAD" | wc -l
 ```
 
 ---
@@ -92,7 +94,7 @@ git diff --name-only origin/main..HEAD | wc -l
 
 ### 相關連結
 - [Linear 連結](https://linear.app/...)
-- GitHub Issue: closes #123
+- GitHub Issue 參照（格式見下方「Issue 參照語法」）
 
 ### 變更類型
 - [ ] 新增功能 (feat)
@@ -123,6 +125,24 @@ git diff --name-only origin/main..HEAD | wc -l
 - [ ] 第三方服務整合已更新
 - [ ] 相關文件已同步更新
 ```
+
+---
+
+## Issue 參照語法
+
+在 PR 描述中可使用下列關鍵字連結或關閉 issue：
+
+| 語法 | 效果 |
+|------|------|
+| `Fixes #1234` | PR merge 時自動關閉 GitHub issue #1234 |
+| `Closes #1234` | 同上（等效於 Fixes） |
+| `Resolves #1234` | 同上（等效於 Fixes） |
+| `Refs #1234` | 僅連結，不關閉 issue |
+| `Fixes OWNER/REPO#1234` | 跨 repo 關閉（需有權限） |
+| `Refs LINEAR-ABC-123` | 連結 Linear 單號（純文字標記） |
+| `Refs INTERNAL-1234` | 連結內部單號（純文字標記，避免 PII） |
+
+> **注意**：GitHub 只會因 `Fixes` / `Closes` / `Resolves` 這類關鍵字在 merge 時自動關閉 issue；其他標記僅作連結之用。
 
 ---
 
