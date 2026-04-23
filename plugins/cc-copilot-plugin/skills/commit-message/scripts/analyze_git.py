@@ -48,11 +48,24 @@ class StagedFiles:
 
 
 @dataclass(frozen=True)
+class RiskTags:
+    """結構化風險標籤，供 suggest_branches / 下游工具穩定消費，避免字串比對 risk_factors。"""
+
+    has_large_change: bool = False
+    has_many_files: bool = False
+    has_lock_files: bool = False
+    has_auth: bool = False
+    has_db: bool = False
+    lock_file_names: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class Report:
     branch: str
     is_main: bool
     score: int
     risk_factors: list[str]
+    risk_tags: RiskTags
     files_changed: int
     total_lines: int
     insertions: int
@@ -153,33 +166,52 @@ def compute_score(
     total_lines: int,
     files_list: list[str],
     all_staged: list[str],
-) -> tuple[int, list[str]]:
-    """依變更量與高風險關鍵字計算複雜度分數。"""
+) -> tuple[int, list[str], RiskTags]:
+    """依變更量與高風險關鍵字計算複雜度分數。
+
+    回傳 `(score, risk_factors, risk_tags)`：
+    - `risk_factors` 供人類閱讀（含具體數字或檔名）。
+    - `risk_tags` 為結構化旗標，下游 `suggest_branches` 等邏輯應僅依此決策，
+      以避免因 `risk_factors` 文案調整造成靜默行為改變。
+    """
     score = 0
     risk_factors: list[str] = []
 
-    if total_lines > 200:
+    has_large_change = total_lines > 200
+    if has_large_change:
         score += 3
         risk_factors.append(f"大量變更 ({total_lines} 行)")
 
-    if files_changed > 5:
+    has_many_files = files_changed > 5
+    if has_many_files:
         score += 2
         risk_factors.append(f"變更檔案過多 ({files_changed} 個)")
 
     found_locks = [f for f in files_list if os.path.basename(f) in LOCK_FILES]
-    if found_locks:
+    has_lock_files = bool(found_locks)
+    if has_lock_files:
         score += 5
         risk_factors.append(f"包含 Lock 檔案: {', '.join(found_locks)}")
 
-    if any(re.search(r"auth|security|permission|login", f, re.I) for f in all_staged):
+    has_auth = any(re.search(r"auth|security|permission|login", f, re.I) for f in all_staged)
+    if has_auth:
         score += 3
         risk_factors.append("涉及認證或安全邏輯")
 
-    if any(re.search(r"migration|schema|database|db", f, re.I) for f in all_staged):
+    has_db = any(re.search(r"migration|schema|database|db", f, re.I) for f in all_staged)
+    if has_db:
         score += 3
         risk_factors.append("涉及資料庫變更")
 
-    return score, risk_factors
+    tags = RiskTags(
+        has_large_change=has_large_change,
+        has_many_files=has_many_files,
+        has_lock_files=has_lock_files,
+        has_auth=has_auth,
+        has_db=has_db,
+        lock_file_names=found_locks,
+    )
+    return score, risk_factors, tags
 
 
 def infer_primary_type(files: StagedFiles) -> str:
@@ -200,9 +232,13 @@ def infer_primary_type(files: StagedFiles) -> str:
 
 
 def suggest_branches(
-    primary_type: str, files_list: list[str], risk_factors: list[str]
+    primary_type: str, files_list: list[str], risk_tags: RiskTags
 ) -> list[str]:
-    """根據檔案關鍵字與風險因子建議分支名稱。"""
+    """根據檔案關鍵字與結構化風險標籤建議分支名稱。
+
+    `risk_tags` 為 `compute_score` 產出的 `RiskTags`，此處僅讀取旗標，
+    不再比對 `risk_factors` 文字，避免文案異動造成靜默壞行為。
+    """
     keywords: list[str] = []
     for f in files_list:
         name = os.path.basename(f).split(".")[0]
@@ -212,9 +248,9 @@ def suggest_branches(
     top_keyword = keywords[0] if keywords else "work"
     branches = [f"{primary_type}/{top_keyword}"]
 
-    if any("認證或安全" in rf for rf in risk_factors):
+    if risk_tags.has_auth:
         branches.append(f"{primary_type}/auth-logic")
-    if any("資料庫" in rf for rf in risk_factors):
+    if risk_tags.has_db:
         branches.append(f"{primary_type}/db-migration")
 
     return branches
@@ -245,15 +281,18 @@ def analyze() -> Report:
         + [p for entry in files.renamed for p in entry.split(" -> ") if p]
     )
 
-    score, risk_factors = compute_score(files_changed, total_lines, files_list, all_staged)
+    score, risk_factors, risk_tags = compute_score(
+        files_changed, total_lines, files_list, all_staged
+    )
     primary_type = infer_primary_type(files)
-    suggested = suggest_branches(primary_type, files_list, risk_factors)
+    suggested = suggest_branches(primary_type, files_list, risk_tags)
 
     return Report(
         branch=branch,
         is_main=branch in MAIN_BRANCHES,
         score=score,
         risk_factors=risk_factors,
+        risk_tags=risk_tags,
         files_changed=files_changed,
         total_lines=total_lines,
         insertions=insertions,

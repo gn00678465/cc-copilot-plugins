@@ -116,17 +116,20 @@ git status --porcelain
 # 動態取得 base branch，取代硬編的 origin/main
 BASE=$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')
 
-# 確認已推送到遠端；若尚未推送則自動建立追蹤分支
-git push -u origin HEAD 2>/dev/null || true
+# 確認已推送到遠端；若尚未設 upstream，`-u` 會建立追蹤關係。
+# 任何錯誤（無可推送 commit、衝突等）應直接顯示給使用者處理，不抑制輸出。
+git push -u origin HEAD
 ```
 
 ### Step 3：變更分析
 
 ```bash
-git log "origin/$BASE..HEAD" --oneline | wc -l        # commit 數
-git diff --name-only "origin/$BASE..HEAD" | wc -l     # 變更檔案數
-git diff "origin/$BASE...HEAD"                         # 完整 diff（必要時參考）
+git log "origin/$BASE..HEAD" --oneline | wc -l         # commit 數（兩點：HEAD 相對 BASE 的新 commits）
+git diff --name-only "origin/$BASE...HEAD" | wc -l     # 變更檔案數（三點：相對 merge-base，與 GitHub PR diff 一致）
+git diff "origin/$BASE...HEAD"                         # 完整 diff（三點，與 gh pr diff 一致）
 ```
+
+> **兩點 vs 三點**：`git log A..B` 顯示「B 有但 A 沒有」的 commit；`git diff A...B` 比較「merge-base(A,B) 與 B」——後者才是 GitHub PR 頁面顯示的 diff，file-count 與完整 diff 都應使用三點以保持一致。
 
 ### Step 4：模板選擇（參考 `references/pr-template.md`）
 

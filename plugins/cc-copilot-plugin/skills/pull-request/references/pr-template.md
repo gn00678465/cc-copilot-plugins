@@ -27,11 +27,11 @@
 ```bash
 BASE=$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')
 
-# commit 數
+# commit 數（兩點：HEAD 相對 BASE 的新 commits）
 git log "origin/$BASE..HEAD" --oneline | wc -l
 
-# 變更檔案數
-git diff --name-only "origin/$BASE..HEAD" | wc -l
+# 變更檔案數（三點：相對 merge-base，與 GitHub PR diff 及 gh pr diff 一致）
+git diff --name-only "origin/$BASE...HEAD" | wc -l
 ```
 
 ---
