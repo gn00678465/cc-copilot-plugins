@@ -30,7 +30,9 @@ function getInitialHead() {
 
 const COMPLETION_PROMISE = 'APPROVAL';
 const DEFAULT_MODEL = 'gpt-5.4';
-const DEFAULT_MAX_ITERATIONS = 0;
+// Loops have a bounded default so a broken / indecisive reviewer cannot run
+// forever. Callers can opt into unlimited with `--max-iterations 0`.
+const DEFAULT_MAX_ITERATIONS = 3;
 const DEFAULT_MODE = 'claude';
 
 const HELP_TEXT = `Code Review Loop - Iterative review loop with Approval gate
@@ -42,7 +44,7 @@ ARGUMENTS:
   PROMPT...    Review context / task description (can be multiple words without quotes)
 
 OPTIONS:
-  --max-iterations <n>   Maximum iterations before auto-stop (0 = unlimited, default: 0)
+  --max-iterations <n>   Maximum iterations before auto-stop (0 = unlimited, default: ${DEFAULT_MAX_ITERATIONS})
   --model <name>         Model name to record in state (default: ${DEFAULT_MODEL})
   --mode claude|copilot  Dot-directory to use (default: claude)
   -h, --help             Show this help message
@@ -136,7 +138,7 @@ function findProjectRoot() {
 }
 
 function writeStateFile(opts) {
-  const { maxIterations, mode, prompt } = opts;
+  const { maxIterations, mode, prompt, model } = opts;
   const root = findProjectRoot();
   const dotDir = path.join(root, `.${mode}`);
   fs.mkdirSync(dotDir, { recursive: true });
@@ -150,6 +152,8 @@ function writeStateFile(opts) {
     `max_iterations: ${maxIterations}`,
     `completion_promise: "${COMPLETION_PROMISE}"`,
     `started_at: "${startedAt}"`,
+    `model: "${model}"`,
+    `mode: "${mode}"`,
     'base_revision: null',
     'head_sha: null',
     `initial_head: ${initialHead ? `"${initialHead}"` : 'null'}`,
@@ -174,13 +178,40 @@ function printMissionStart(opts) {
       '',
       `Iteration: 1`,
       `Max iterations: ${iterLabel}`,
-      `Model: ${model}`,
+      `Reviewer model (Copilot CLI): ${model}`,
       `Mode: ${mode} (.${mode}/)`,
       `Completion promise: ${COMPLETION_PROMISE} (ONLY output when TRUE - do not lie!)`,
       '',
-      'The stop hook is now active. On the first exit the original prompt is replayed.',
-      'Subsequent iterations receive a git diff range review prompt focused on changes',
-      'since the previous iteration. The loop continues until Approval or max iterations.',
+      '═'.repeat(63),
+      'ROLE SEPARATION — STRICT',
+      '═'.repeat(63),
+      '  Reviewer      = external Copilot CLI subagent (spawned by this plugin)',
+      '  Writer/Fixer  = this Claude Code session (you)',
+      '',
+      '  You MUST NOT conduct the code review yourself. Your ONLY jobs are:',
+      '    1. Read the Copilot reviewer\'s report as it arrives.',
+      '    2. Fix every Critical / Important finding the reviewer listed.',
+      '    3. Exit your turn so the stop hook can roll the next iteration.',
+      '',
+      '  YOU MUST NOT emit <promise>APPROVAL</promise>. That token is reserved',
+      '  for the Copilot reviewer exclusively. The stop hook terminates the',
+      '  loop only when the REVIEWER\'s report ends with that literal token.',
+      '  If you emit it you are impersonating the reviewer — a hard violation.',
+      '',
+      '  FORBIDDEN: analyzing the diff yourself, listing your own findings,',
+      '  writing Critical/Important/Suggestion/Nit sections, paraphrasing the',
+      '  reviewer\'s verdict, emitting the approval token in any form.',
+      '═'.repeat(63),
+      '',
+      'LOOP MECHANICS:',
+      '  - Iteration 1: the Copilot reviewer runs now against your prompt.',
+      '    Its report is persisted to the state dir for the stop hook.',
+      `  - Iteration 2+: the stop hook re-runs the Copilot reviewer on the`,
+      '    incremental git range, persists the new report, and feeds it',
+      '    back to you. You only fix.',
+      '  - Exit: the reviewer\'s latest report ends with the literal token',
+      '    <promise>APPROVAL</promise> (on its own final line), or max',
+      '    iterations is reached.',
       '',
       `To monitor: head -10 .${mode}/code-review.local.md`,
       '',
@@ -195,35 +226,65 @@ function printMissionStart(opts) {
       'CRITICAL - Code Review Loop Completion Promise',
       '═'.repeat(63),
       '',
-      'To complete this loop, output this EXACT text:',
+      'The terminator token is:',
       `  <promise>${COMPLETION_PROMISE}</promise>`,
       '',
-      'STRICT REQUIREMENTS (DO NOT VIOLATE):',
-      '  ✓ Use <promise> XML tags EXACTLY as shown above',
-      '  ✓ The statement MUST be completely and unequivocally TRUE',
-      '  ✓ Do NOT output false statements to exit the loop',
-      '  ✓ Do NOT lie even if you think you should exit',
+      'OWNERSHIP:',
+      '  - The Copilot reviewer emits this token when it approves.',
+      '  - You (writer/fixer) MUST NEVER emit this token.',
+      '  - The stop hook checks the REVIEWER\'S PERSISTED REPORT, not your',
+      '    messages. You cannot end the loop by saying the right words.',
       '',
       'IMPORTANT - Do not circumvent the loop:',
-      '  Even if you believe you\'re stuck or the task is impossible,',
-      '  you MUST NOT output a false promise statement. The loop is',
-      '  designed to continue until the promise is GENUINELY TRUE.',
+      '  Even if you believe the work is impossible, DO NOT emit the token.',
+      '  The loop only ends when the reviewer genuinely approves or max',
+      '  iterations is hit.',
       '═'.repeat(63),
       '',
     ].join('\n')
   );
 }
 
+function reportFilePath(mode) {
+  const root = findProjectRoot();
+  return path.join(root, `.${mode}`, 'code-review.last-report.md');
+}
+
 function runCopilotScript(opts) {
   return new Promise((resolve, reject) => {
     const copilotScript = path.join(__dirname, 'copilot.js');
+    const { buildExclusionClause, buildLoopContextSuffix } = require(copilotScript);
+    // Iteration-1 reviewer prompt = user prompt + exclusion clause for our
+    // own state files + (conditionally) emotional-stimuli context when the
+    // requested max_iterations puts this first round near the cap.
+    const enrichedPrompt =
+      opts.prompt +
+      buildExclusionClause() +
+      buildLoopContextSuffix(1, opts.maxIterations);
     const child = spawn(
       process.execPath,
-      [copilotScript, '--prompt', opts.prompt, '--model', opts.model],
-      { stdio: 'inherit' }
+      [copilotScript, '--prompt', enrichedPrompt, '--model', opts.model],
+      // stdin inherited; stdout piped so we can tee + persist; stderr inherited
+      { stdio: ['inherit', 'pipe', 'inherit'] }
     );
+
+    let buffered = '';
+    child.stdout.on('data', (chunk) => {
+      buffered += chunk.toString();
+      process.stdout.write(chunk);
+    });
+
     child.on('error', reject);
     child.on('close', (code) => {
+      // Persist the reviewer's full report so the stop hook can inspect it
+      // as the sole source of truth for loop termination.
+      try {
+        fs.writeFileSync(reportFilePath(opts.mode), buffered, 'utf8');
+      } catch (err) {
+        process.stderr.write(
+          `⚠️  Code review loop: failed to persist reviewer report: ${err.message}\n`
+        );
+      }
       if (code === 0) resolve();
       else reject(new Error(`copilot.js exited with code ${code}`));
     });

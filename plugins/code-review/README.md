@@ -41,7 +41,7 @@ Starts an automated review-fix loop.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `PROMPT` | *(required)* | Review context — what to review and any specific concerns |
-| `--max-iterations N` | `0` (unlimited) | Stop automatically after N iterations |
+| `--max-iterations N` | `3` | Stop automatically after N iterations. Pass `0` for unlimited. |
 | `--model MODEL` | `gpt-5.4` | Copilot model used by the reviewer subagent |
 | `--mode claude\|copilot` | `claude` | Dot-directory to use for state (`.claude/` or `.copilot/`) |
 

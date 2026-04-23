@@ -6,13 +6,25 @@
  * Code Review Stop Hook
  *
  * Runs when Claude Code tries to exit. Checks if a review loop is active,
- * evaluates whether the Reviewer has issued <promise>APPROVAL</promise>, and
- * either allows the session to end or blocks the exit with a continuation prompt.
+ * determines whether the Reviewer (Copilot CLI) has issued
+ * <promise>APPROVAL</promise> on the final non-empty line of its persisted
+ * report, and either allows the session to end or blocks the exit by
+ * re-invoking the reviewer on the incremental diff.
+ *
+ * The writer/fixer session does NOT participate in the approval decision —
+ * its last message is intentionally ignored. Only the reviewer's report
+ * (code-review.last-report.md) can terminate the loop.
+ *
+ * State file lifecycle:
+ *   code-review.local.md carries iteration state across Stop events. It is
+ *   cleared ONLY on confirmed reviewer APPROVAL — the one moment the loop
+ *   is genuinely ending. Every other outcome (max-iterations hit, no diff
+ *   since last iteration, parse errors, unresolved base commit) preserves
+ *   the state so the next iteration has a reference to resume from. Users
+ *   can discard a stuck loop explicitly via /cancel-review.
  *
  * Hook input (stdin): {
- *   "transcript_path": "/path/to/transcript.jsonl",
  *   "cwd": "/path/to/project",
- *   "last_assistant_message": "...",
  *   ...
  * }
  * Hook output (stdout): JSON block decision, or empty to allow exit.
@@ -22,20 +34,33 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-// Matches <promise>APPROVAL</promise> emitted by the agent to signal completion
-const APPROVAL_PATTERN = /<promise>\s*APPROVAL\s*<\/promise>/i;
+// Approval is recognized only when the reviewer's report ends with the
+// terminator token alone on its final non-empty line. Looser matching (e.g.
+// anywhere in the text) is unsafe: the reviewer frequently discusses the
+// token in prose or quotes it inside code blocks while withholding approval.
+const APPROVAL_LINE_PATTERN = /^\s*<promise>\s*APPROVAL\s*<\/promise>\s*$/i;
+
+function hasApprovalInReport(text) {
+  if (typeof text !== 'string' || !text.trim()) return false;
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  let i = lines.length - 1;
+  while (i >= 0 && lines[i].trim() === '') i--;
+  if (i < 0) return false;
+  return APPROVAL_LINE_PATTERN.test(lines[i]);
+}
 
 // ---------------------------------------------------------------------------
 // Git helpers
 // ---------------------------------------------------------------------------
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
+
+const DEFAULT_REVIEWER_MODEL = 'gpt-5.4';
 
 function gitStashCreate(cwd) {
   try {
@@ -50,6 +75,41 @@ function gitHeadCommit(cwd) {
     return execSync('git rev-parse HEAD', { cwd, encoding: 'utf8' }).trim();
   } catch (_) {
     return '';
+  }
+}
+
+function resolveCopilotScript() {
+  // session-stop.js lives in plugins/code-review/scripts/
+  // copilot.js lives in plugins/code-review/skills/code-review-loop/scripts/
+  return path.resolve(
+    __dirname,
+    '..',
+    'skills',
+    'code-review-loop',
+    'scripts',
+    'copilot.js'
+  );
+}
+
+function runCopilotReviewer({ workspaceRoot, model, prompt }) {
+  const copilotScript = resolveCopilotScript();
+  try {
+    const out = execFileSync(
+      process.execPath,
+      [copilotScript, '--prompt', prompt, '--model', model || DEFAULT_REVIEWER_MODEL],
+      {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 20 * 1024 * 1024,
+      }
+    );
+    return (out || '').trim();
+  } catch (err) {
+    process.stderr.write(
+      `⚠️  Code review loop: Copilot reviewer invocation failed: ${err.message}\n`
+    );
+    return null;
   }
 }
 
@@ -73,6 +133,32 @@ function resolveWorkspaceRoot(cwd) {
 
 function resolveStateFile(workspaceRoot, dotDir) {
   return path.join(workspaceRoot, dotDir, 'code-review.local.md');
+}
+
+function resolveReportFile(workspaceRoot, dotDir) {
+  return path.join(workspaceRoot, dotDir, 'code-review.last-report.md');
+}
+
+function readReportFile(reportFile) {
+  try {
+    return fs.readFileSync(reportFile, 'utf8');
+  } catch (_) {
+    return '';
+  }
+}
+
+function writeReportFile(reportFile, text) {
+  try {
+    fs.writeFileSync(reportFile, text ?? '', 'utf8');
+  } catch (err) {
+    process.stderr.write(
+      `⚠️  Code review loop: failed to persist reviewer report: ${err.message}\n`
+    );
+  }
+}
+
+function clearReportFile(reportFile) {
+  try { fs.unlinkSync(reportFile); } catch (_) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -138,54 +224,6 @@ function clearState(stateFile) {
 }
 
 // ---------------------------------------------------------------------------
-// Transcript parsing (fallback when last_assistant_message is unavailable)
-// ---------------------------------------------------------------------------
-
-function parseJsonl(filePath) {
-  const raw = fs.readFileSync(filePath, 'utf8');
-  return raw.split('\n')
-    .filter((line) => line.trim())
-    .flatMap((line) => {
-      try { return [JSON.parse(line)]; } catch (_) { return []; }
-    });
-}
-
-function extractLastAssistantText(transcriptPath) {
-  const entries = parseJsonl(transcriptPath);
-  const assistantEntries = entries.filter((e) => e && e.role === 'assistant');
-
-  if (assistantEntries.length === 0) {
-    throw new Error('No assistant messages found in transcript');
-  }
-
-  const last = assistantEntries[assistantEntries.length - 1];
-  const content = (last.message && Array.isArray(last.message.content))
-    ? last.message.content
-    : [];
-
-  const text = content
-    .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-    .map((b) => b.text)
-    .join('\n');
-
-  if (!text) {
-    throw new Error('Assistant message contained no text content');
-  }
-  return text;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function expandTilde(filePath) {
-  if (filePath.startsWith('~/') || filePath === '~') {
-    return path.join(os.homedir(), filePath.slice(1));
-  }
-  return filePath;
-}
-
-// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -196,6 +234,7 @@ async function main() {
   const input = readHookInput();
   const workspaceRoot = resolveWorkspaceRoot(input.cwd);
   const stateFile = resolveStateFile(workspaceRoot, dotDir);
+  const reportFile = resolveReportFile(workspaceRoot, dotDir);
 
   if (!fs.existsSync(stateFile)) {
     return; // No active review loop — allow exit silently
@@ -205,45 +244,49 @@ async function main() {
   try {
     state = loadState(stateFile);
   } catch (err) {
-    process.stderr.write(`⚠️  Code review loop: Failed to parse state file: ${err.message}\n`);
-    clearState(stateFile);
+    // State is corrupt but may represent user work in progress — DO NOT
+    // auto-delete. Warn and let the user inspect or run /cancel-review.
+    process.stderr.write(
+      `⚠️  Code review loop: failed to parse .${mode}/code-review.local.md ` +
+      `(${err.message}). The state file is corrupt — inspect it manually or ` +
+      `run /cancel-review to discard it.\n`
+    );
     return;
   }
 
   if (!state.active) return;
 
+  // Approval check — SOURCE OF TRUTH is the reviewer's persisted report, NOT
+  // the writer's last message. The reviewer is the only party authorized to
+  // emit the terminator token, so we inspect only its output. This prevents
+  // the writer from falsely terminating the loop by quoting or paraphrasing
+  // ambiguous reviewer prose (e.g. "not recommended to approve").
+  //
+  // APPROVAL is also the ONLY path that clears state — see module doc.
+  const latestReport = readReportFile(reportFile);
+  if (hasApprovalInReport(latestReport)) {
+    process.stdout.write(
+      '✅ Code review loop: Reviewer issued APPROVAL in its latest report. ' +
+      'Session complete.\n'
+    );
+    clearState(stateFile);
+    clearReportFile(reportFile);
+    return;
+  }
+
   const iteration = typeof state.iteration === 'number' ? state.iteration : 0;
   const maxIterations = typeof state.max_iterations === 'number' ? state.max_iterations : 0;
 
   if (maxIterations > 0 && iteration >= maxIterations) {
-    process.stdout.write('🛑 Code review loop: Max iterations reached.\n');
-    clearState(stateFile);
-    return;
-  }
-
-  // Resolve last assistant text: prefer direct hook field, fall back to transcript.
-  // Transcript errors are non-fatal — treat as not-approved and continue loop.
-  let lastAssistantText = '';
-
-  if (typeof input.last_assistant_message === 'string' && input.last_assistant_message.trim()) {
-    lastAssistantText = input.last_assistant_message;
-  } else {
-    const rawTranscriptPath = input.transcript_path || '';
-    if (rawTranscriptPath) {
-      const transcriptPath = path.resolve(expandTilde(rawTranscriptPath));
-      if (fs.existsSync(transcriptPath)) {
-        try {
-          lastAssistantText = extractLastAssistantText(transcriptPath);
-        } catch (_) {
-          // Transcript unreadable — treat as not-approved and continue loop
-        }
-      }
-    }
-  }
-
-  if (lastAssistantText && APPROVAL_PATTERN.test(lastAssistantText)) {
-    process.stdout.write('✅ Code review loop: Approval detected. Session complete.\n');
-    clearState(stateFile);
+    // Loop is suspended, not terminated. State is preserved so the user can
+    // inspect the last iteration, raise max_iterations to continue, or run
+    // /cancel-review to discard. We do NOT auto-clear state here.
+    process.stdout.write(
+      `🛑 Code review loop: max iterations (${maxIterations}) reached at ` +
+      `iteration ${iteration}. Loop suspended; state preserved.\n` +
+      `  - To discard state, run /cancel-review.\n` +
+      `  - To continue, raise max_iterations in .${mode}/code-review.local.md.\n`
+    );
     return;
   }
 
@@ -266,11 +309,14 @@ async function main() {
       // Agent committed changes — use HEAD as the snapshot reference
       snapshot = currentHead;
     } else {
+      // No diff to review this round. The writer may still be mid-fix.
+      // Preserve state AND the existing reviewer report (still authoritative
+      // for the next Stop event); do not bump iteration.
       process.stderr.write(
-        '⚠️  Code review loop: No changes detected ' +
-        '(working tree clean, HEAD unchanged). Stopping.\n'
+        `⚠️  Code review loop: no changes detected since iteration ${iteration}. ` +
+        `Address the reviewer's findings before exiting, or run /cancel-review ` +
+        `to end the loop. State preserved.\n`
       );
-      clearState(stateFile);
       return;
     }
   }
@@ -284,11 +330,12 @@ async function main() {
   const newHead = snapshot;
 
   if (!newBase) {
+    // Environmental error — no HEAD commit. Don't nuke state; let the user
+    // correct the repo state or explicitly cancel.
     process.stderr.write(
-      '⚠️  Code review loop: Unable to resolve base_revision ' +
-      '(no HEAD commit). Aborting loop.\n'
+      `⚠️  Code review loop: unable to resolve base_revision (no HEAD commit). ` +
+      `Run /cancel-review if this loop should be discarded. State preserved.\n`
     );
-    clearState(stateFile);
     return;
   }
 
@@ -301,22 +348,88 @@ async function main() {
     head_sha: newHead,
   });
 
-  // 4) Replace prompt with range instruction for the next round
-  const rangePrompt =
+  // 4) Re-invoke the Copilot reviewer for the new range. The writer/fixer
+  //    (the main session) must NEVER review the diff themselves — this hook
+  //    owns the reviewer role to preserve writer/reviewer separation.
+  const reviewerModel = (typeof state.model === 'string' && state.model)
+    ? state.model
+    : DEFAULT_REVIEWER_MODEL;
+
+  // Compose the iteration 2+ reviewer prompt with:
+  //   - the range-focused review instruction,
+  //   - an exclusion clause for our own state files (so reviewer ignores
+  //     .claude/code-review.*.md if they happen to be tracked in git),
+  //   - emotional-stimuli context when we're in the final iteration window
+  //     (research suggests this lifts accuracy and decisiveness on the last
+  //     call — see copilot.js::buildLoopContextSuffix).
+  const { buildExclusionClause, buildLoopContextSuffix } = require(
+    path.resolve(__dirname, '..', 'skills', 'code-review-loop', 'scripts', 'copilot.js')
+  );
+
+  const reviewerPrompt =
     `Review the incremental changes in this git range: ` +
     `\`${newBase}..${newHead}\`.\n\n` +
     `Run \`git diff ${newBase}..${newHead}\` to see exactly what changed ` +
     `since the previous review iteration. Apply the same multi-axis ` +
     `review (correctness / quality / security / performance) focused ` +
-    `ONLY on these changes.`;
+    `ONLY on these changes.` +
+    buildExclusionClause() +
+    buildLoopContextSuffix(nextIteration, maxIterations);
+
+  const reviewerReport = runCopilotReviewer({
+    workspaceRoot,
+    model: reviewerModel,
+    prompt: reviewerPrompt,
+  });
+
+  // Persist the reviewer's latest report — this is the sole source of truth
+  // the next stop-hook invocation will consult for the approval verdict.
+  // When the invocation failed, explicitly clear the previous report so a
+  // stale APPROVAL from an earlier iteration cannot trigger false completion.
+  if (reviewerReport) {
+    writeReportFile(reportFile, reviewerReport);
+  } else {
+    clearReportFile(reportFile);
+  }
+
+  const reason = reviewerReport
+    ? [
+        `The Copilot reviewer produced the following report for git range \`${newBase}..${newHead}\`.`,
+        `You are the writer/fixer — DO NOT conduct your own review; act only on this report.`,
+        '',
+        '---',
+        reviewerReport,
+        '---',
+        '',
+        'Your job now:',
+        '  1. Fix every Critical and Important finding above.',
+        '  2. DO NOT emit `<promise>APPROVAL</promise>` yourself — that token',
+        '     is reserved for the reviewer. The stop hook inspects the',
+        '     persisted reviewer report, not your messages.',
+        '  3. When done, exit your turn; the stop hook will either detect',
+        '     the reviewer\'s APPROVAL on its next check or re-invoke the',
+        '     reviewer on the new diff for another iteration.',
+      ].join('\n')
+    : [
+        `The Copilot reviewer could not be invoked for git range \`${newBase}..${newHead}\`.`,
+        'Do NOT review the diff yourself. Do NOT emit the approval token.',
+        'Re-invoke the reviewer by running:',
+        '',
+        `  node \${CLAUDE_PLUGIN_ROOT}/skills/code-review-loop/scripts/copilot.js \\`,
+        `    --prompt "Review incremental changes in git range ${newBase}..${newHead}" \\`,
+        `    --model ${reviewerModel}`,
+        '',
+        'Then fix what that report flags. Only the reviewer can terminate the loop.',
+      ].join('\n');
 
   process.stdout.write(
     JSON.stringify({
       decision: 'block',
-      reason: rangePrompt,
+      reason,
       systemMessage:
         `🔄 Code Review iteration ${nextIteration} | ` +
-        `Range: ${newBase.slice(0, 7)}..${newHead.slice(0, 7)}`,
+        `Range: ${newBase.slice(0, 7)}..${newHead.slice(0, 7)} | ` +
+        `Reviewer: ${reviewerReport ? 'Copilot report persisted' : 'invocation failed — report cleared'}`,
     }, null, 2) + '\n'
   );
 }
