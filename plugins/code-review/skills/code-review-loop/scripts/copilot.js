@@ -137,6 +137,10 @@ function runCopilot(args) {
         if (copilotProcess.stdout) {
             copilotProcess.stdout.on('data', (data) => {
                 stdoutData += data.toString();
+                // Tee each chunk so parent processes (e.g. reviewer.js) can
+                // surface reviewer output in real time instead of waiting for
+                // the whole buffer at exit.
+                process.stdout.write(data);
             });
         }
 
@@ -191,11 +195,10 @@ if (require.main === module) {
     }
 
     if (cli.prompt) {
+        // runCopilot tees stdout chunks directly to process.stdout, so the
+        // CLI entry must not re-print the buffered result or it will double.
         runCopilot({ prompt: cli.prompt, model: cli.model || 'gpt-5-mini' })
-            .then((out) => {
-                if (out) console.log(out);
-                process.exit(0);
-            })
+            .then(() => process.exit(0))
             .catch((err) => {
                 console.error(err);
                 process.exit(1);

@@ -7,7 +7,7 @@
 | 插件 | 版本 | 適用環境 | 說明 |
 |------|------|----------|------|
 | `cc-copilot-plugin` | 0.1.2 | Claude Code / GitHub Copilot CLI 工作流 | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
-| `code-review` | 0.1.0 | Claude Code + 本機 `copilot` CLI | 自動化多輪 code review loop，強制分離 writer / reviewer 角色，提供 `/code-review-loop` 與 `/cancel-review` |
+| `code-review` | 0.1.0 | Claude Code + 本機 `copilot` CLI | 自動化多輪 code review loop，強制分離 writer / reviewer 角色，提供 `/code-review-loop`、`/continue-loop` 與 `/cancel-review` |
 
 ## Claude Code 安裝方式
 
@@ -40,7 +40,7 @@
 安裝完成後可使用：
 
 - `cc-copilot-plugin`: `commit-message`、`pull-request`
-- `code-review`: `/code-review-loop`、`/cancel-review`
+- `code-review`: `/code-review-loop`、`/continue-loop`、`/cancel-review`
 
 > `code-review` 另需先安裝 GitHub Copilot CLI，並確認 `copilot` 可於 `PATH` 中執行。
 

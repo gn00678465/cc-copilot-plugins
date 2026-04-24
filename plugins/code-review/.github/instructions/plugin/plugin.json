@@ -1,6 +1,6 @@
 {
     "name": "code-review",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "description": "Professional code review loop plugin with automated reviewer relay",
     "author": {
         "name": "gn00678465",

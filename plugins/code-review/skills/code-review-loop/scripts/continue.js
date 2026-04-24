@@ -71,11 +71,10 @@ function parseArgs(argv) {
         exitWithError('--max-iterations requires a numeric value (e.g. --max-iterations 5)');
       }
       const raw = args[i + 1].trim();
-      const n = parseInt(raw, 10);
-      if (isNaN(n) || n < 0 || String(n) !== raw) {
+      if (!/^\d+$/.test(raw)) {
         exitWithError(`--max-iterations must be a non-negative integer, got: ${args[i + 1]}`);
       }
-      result.maxIterations = n;
+      result.maxIterations = parseInt(raw, 10);
       i += 2;
     } else {
       exitWithError(

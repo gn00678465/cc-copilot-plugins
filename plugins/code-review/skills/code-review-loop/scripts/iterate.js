@@ -16,7 +16,7 @@ const { execSync, execFileSync } = require('child_process');
 // Approval detection
 // ---------------------------------------------------------------------------
 
-const APPROVAL_LINE_PATTERN = /^\s*<promise>\s*APPROVAL\s*<\/promise>\s*$/i;
+const APPROVAL_LINE_PATTERN = /^<promise>APPROVAL<\/promise>$/;
 
 function hasApprovalInReport(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
@@ -24,7 +24,7 @@ function hasApprovalInReport(text) {
   let i = lines.length - 1;
   while (i >= 0 && lines[i].trim() === '') i--;
   if (i < 0) return false;
-  return APPROVAL_LINE_PATTERN.test(lines[i]);
+  return APPROVAL_LINE_PATTERN.test(lines[i].trim());
 }
 
 // ---------------------------------------------------------------------------

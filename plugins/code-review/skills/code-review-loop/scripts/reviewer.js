@@ -215,8 +215,8 @@ function printMissionStart(opts) {
       '',
       `To monitor: head -10 .${mode}/code-review.local.md`,
       '',
-      '⚠️  WARNING: This loop cannot be stopped manually! It will run infinitely',
-      '    unless you set --max-iterations.',
+      '⚠️  WARNING: By default this loop is bounded by --max-iterations (default: 3).',
+      '    Use --max-iterations 0 for unlimited; run /cancel-review to stop early.',
       '',
       '🔄',
       '',
@@ -297,7 +297,7 @@ async function main() {
   if (!opts.prompt.trim()) {
     exitWithError(
       'A prompt is required. Provide the review context, e.g.:\n' +
-        '  /code-review-and-quality Review the staged changes for quality'
+        '  /code-review-loop Review the staged changes for quality'
     );
   }
 

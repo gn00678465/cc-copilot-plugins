@@ -18,7 +18,7 @@ Symmetric with `/cancel-review` — this command extends the loop, the other dis
 
 ## Usage
 
-- `/continue-loop` — run the next review at the current cap. Valid only when `iteration < max_iterations` and the writer has made new changes since the last review.
+- `/continue-loop` — run the next review at the current cap. Valid only when (`max_iterations == 0` or `iteration < max_iterations`) and the writer has made new changes since the last review.
 - `/continue-loop --max-iterations N` — raise the cap to `N` (absolute total, not additive) and immediately run the next review. `N` must be greater than the current `iteration`; `N = 0` means unlimited.
 
 ## Execute
