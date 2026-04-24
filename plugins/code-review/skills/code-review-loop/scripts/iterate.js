@@ -185,11 +185,72 @@ function computeNextRange(state, workspaceRoot) {
 }
 
 // ---------------------------------------------------------------------------
+// Reviewer invocation
+//
+// Spawns copilot.js synchronously, returning trimmed stdout on success or
+// null on failure. Failure is logged to stderr but does not throw; callers
+// decide whether to clear a stale report, preserve state, etc.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_REVIEWER_MODEL = 'gpt-5.4';
+
+function resolveCopilotScript() {
+  return path.resolve(__dirname, 'copilot.js');
+}
+
+function invokeReviewer({ workspaceRoot, model, prompt }) {
+  const copilotScript = resolveCopilotScript();
+  try {
+    const out = execFileSync(
+      process.execPath,
+      [copilotScript, '--prompt', prompt, '--model', model || DEFAULT_REVIEWER_MODEL],
+      {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 20 * 1024 * 1024,
+      }
+    );
+    return (out || '').trim();
+  } catch (err) {
+    process.stderr.write(
+      `⚠️  Code review loop: Copilot reviewer invocation failed: ${err.message}\n`
+    );
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Iteration-2+ reviewer prompt composition
+//
+// Assembled from three fragments:
+//   1. The range-focused review instruction (base..head).
+//   2. buildExclusionClause() — tells the reviewer to skip the plugin's own
+//      state files if they happen to be tracked in git.
+//   3. buildLoopContextSuffix() — injects emotional-stimuli context on the
+//      final 1–2 iterations to lift reviewer rigour.
+// ---------------------------------------------------------------------------
+
+function composeIterationPrompt({ base, head, iteration, maxIterations }) {
+  const { buildExclusionClause, buildLoopContextSuffix } = require('./copilot.js');
+  return (
+    `Review the incremental changes in this git range: \`${base}..${head}\`.\n\n` +
+    `Run \`git diff ${base}..${head}\` to see exactly what changed ` +
+    `since the previous review iteration. Apply the same multi-axis ` +
+    `review (correctness / quality / security / performance) focused ` +
+    `ONLY on these changes.` +
+    buildExclusionClause() +
+    buildLoopContextSuffix(iteration, maxIterations)
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
 module.exports = {
   APPROVAL_LINE_PATTERN,
+  DEFAULT_REVIEWER_MODEL,
   hasApprovalInReport,
   gitStashCreate,
   gitHeadCommit,
@@ -205,4 +266,6 @@ module.exports = {
   saveState,
   clearState,
   computeNextRange,
+  invokeReviewer,
+  composeIterationPrompt,
 };

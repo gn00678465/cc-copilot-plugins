@@ -34,9 +34,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 const {
+  DEFAULT_REVIEWER_MODEL,
   hasApprovalInReport,
   resolveWorkspaceRoot,
   resolveStateFile,
@@ -48,52 +48,11 @@ const {
   saveState,
   clearState,
   computeNextRange,
+  invokeReviewer,
+  composeIterationPrompt,
 } = require(
   path.resolve(__dirname, '..', 'skills', 'code-review-loop', 'scripts', 'iterate.js')
 );
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const DEFAULT_REVIEWER_MODEL = 'gpt-5.4';
-
-// ---------------------------------------------------------------------------
-// Copilot invocation (migrated to iterate.js in a follow-up task)
-// ---------------------------------------------------------------------------
-
-function resolveCopilotScript() {
-  return path.resolve(
-    __dirname,
-    '..',
-    'skills',
-    'code-review-loop',
-    'scripts',
-    'copilot.js'
-  );
-}
-
-function runCopilotReviewer({ workspaceRoot, model, prompt }) {
-  const copilotScript = resolveCopilotScript();
-  try {
-    const out = execFileSync(
-      process.execPath,
-      [copilotScript, '--prompt', prompt, '--model', model || DEFAULT_REVIEWER_MODEL],
-      {
-        cwd: workspaceRoot,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        maxBuffer: 20 * 1024 * 1024,
-      }
-    );
-    return (out || '').trim();
-  } catch (err) {
-    process.stderr.write(
-      `⚠️  Code review loop: Copilot reviewer invocation failed: ${err.message}\n`
-    );
-    return null;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Hook input
@@ -212,28 +171,14 @@ async function main() {
     ? state.model
     : DEFAULT_REVIEWER_MODEL;
 
-  // Compose the iteration 2+ reviewer prompt with:
-  //   - the range-focused review instruction,
-  //   - an exclusion clause for our own state files (so reviewer ignores
-  //     .claude/code-review.*.md if they happen to be tracked in git),
-  //   - emotional-stimuli context when we're in the final iteration window
-  //     (research suggests this lifts accuracy and decisiveness on the last
-  //     call — see copilot.js::buildLoopContextSuffix).
-  const { buildExclusionClause, buildLoopContextSuffix } = require(
-    path.resolve(__dirname, '..', 'skills', 'code-review-loop', 'scripts', 'copilot.js')
-  );
+  const reviewerPrompt = composeIterationPrompt({
+    base: newBase,
+    head: newHead,
+    iteration: nextIteration,
+    maxIterations,
+  });
 
-  const reviewerPrompt =
-    `Review the incremental changes in this git range: ` +
-    `\`${newBase}..${newHead}\`.\n\n` +
-    `Run \`git diff ${newBase}..${newHead}\` to see exactly what changed ` +
-    `since the previous review iteration. Apply the same multi-axis ` +
-    `review (correctness / quality / security / performance) focused ` +
-    `ONLY on these changes.` +
-    buildExclusionClause() +
-    buildLoopContextSuffix(nextIteration, maxIterations);
-
-  const reviewerReport = runCopilotReviewer({
+  const reviewerReport = invokeReviewer({
     workspaceRoot,
     model: reviewerModel,
     prompt: reviewerPrompt,
