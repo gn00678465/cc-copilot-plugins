@@ -275,7 +275,7 @@
       "id": 11,
       "name": "stop-hook-max-iterations-suspends-loop-preserving-state",
       "prompt": "Verify the max-iterations exit path SUSPENDS the loop without clearing state. Setup: .claude/code-review.local.md with iteration:3, max_iterations:3, active:true, model/mode set, and a .claude/code-review.last-report.md present (without terminator). Run: echo '{\"transcript_path\":\"\",\"cwd\":\"<repo>\",\"last_assistant_message\":\"...\"}' | node plugins/code-review/scripts/session-stop.js claude.",
-      "expected_output": "stdout contains 'max iterations (3) reached at iteration 3. Loop suspended; state preserved.' and instructions mentioning /cancel-review and raising max_iterations. Both state and report files REMAIN on disk. Exit code 0. Copilot is NOT invoked. Only a confirmed APPROVAL (id:5) is allowed to clear state.",
+      "expected_output": "stdout contains 'max iterations (3) reached at iteration 3. Loop suspended; state preserved.' and instructions mentioning /continue-loop AND /cancel-review. Both state and report files REMAIN on disk. Exit code 0. Copilot is NOT invoked. Only a confirmed APPROVAL (id:5) is allowed to clear state.",
       "files": [],
       "assertions": [
         {
@@ -287,8 +287,8 @@
           "description": "stdout contains '/cancel-review' as the documented way to discard state"
         },
         {
-          "name": "message_mentions_raising_max",
-          "description": "stdout contains 'raise max_iterations' so the user knows how to continue"
+          "name": "message_mentions_continue_loop",
+          "description": "stdout contains '/continue-loop' and indicates --max-iterations N is the way to raise the cap"
         },
         {
           "name": "state_file_preserved",
@@ -513,6 +513,138 @@
         {
           "name": "cancellation_message_with_iteration",
           "description": "Output contains 'Cancelled code review loop (was at iteration' followed by the numeric iteration"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "name": "continue-loop-rejects-without-active-state",
+      "prompt": "Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js --max-iterations 5 in a fresh git repo with no .claude/code-review.local.md. Capture stdout + stderr + exit code and verify the decision matrix: no active loop path rejects cleanly without side effects.",
+      "expected_output": "Exit code 1. stderr contains 'No active code review loop found'. No state file is created. Copilot is NOT invoked.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_active_loop_message",
+          "description": "stderr contains 'No active code review loop found'"
+        },
+        {
+          "name": "exit_code_one",
+          "description": "exit code is 1"
+        },
+        {
+          "name": "no_state_file_created",
+          "description": "no .claude/code-review.local.md is created by continue.js"
+        },
+        {
+          "name": "no_copilot_invocation",
+          "description": "copilot.js is not spawned"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "name": "continue-loop-rejects-at-cap-without-flag",
+      "prompt": "Setup: git repo with a committed file and .claude/code-review.local.md containing iteration:3, max_iterations:3, active:true, model:'gpt-5.4', mode:'claude'. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js (no flags).",
+      "expected_output": "Exit code 1. stderr contains 'Loop is at its cap (iteration 3 / max 3)' and 'Pass --max-iterations'. State file iteration and max_iterations remain 3. Copilot is NOT invoked.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "at_cap_message",
+          "description": "stderr contains 'at its cap' and 'Pass --max-iterations'"
+        },
+        {
+          "name": "exit_code_one",
+          "description": "exit code is 1"
+        },
+        {
+          "name": "state_iteration_unchanged",
+          "description": ".claude/code-review.local.md still has iteration: 3"
+        },
+        {
+          "name": "state_max_unchanged",
+          "description": ".claude/code-review.local.md still has max_iterations: 3"
+        },
+        {
+          "name": "no_copilot_invocation",
+          "description": "copilot.js is not spawned"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "name": "continue-loop-raises-cap-and-runs-reviewer",
+      "prompt": "Setup: git repo with a committed file + dirty working tree (so git stash create yields a snapshot). .claude/code-review.local.md with iteration:3, max_iterations:3, active:true, model:'gpt-5.4', mode:'claude', head_sha set to HEAD. Intercept copilot.js with a shim that prints 'SHIM-REVIEW\\nImportant: foo\\n'. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js --max-iterations 5.",
+      "expected_output": "Exit code 0. stdout contains the continue banner ('Code Review Loop continued', 'Iteration: 4', 'ROLE SEPARATION'), followed by the reviewer report including 'SHIM-REVIEW' and 'Important: foo'. State updates atomically: iteration becomes 4, max_iterations becomes 5, base_revision and head_sha are 40-hex SHAs. .claude/code-review.last-report.md contains the shim stdout. copilot.js is invoked exactly once with --model gpt-5.4 and a prompt that includes the range 'base..head' and 'REVIEW SCOPE — EXCLUSIONS'.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "banner_continued_line",
+          "description": "stdout contains 'Code Review Loop continued'"
+        },
+        {
+          "name": "banner_iteration_next",
+          "description": "stdout contains 'Iteration: 4'"
+        },
+        {
+          "name": "banner_role_separation",
+          "description": "stdout contains 'ROLE SEPARATION'"
+        },
+        {
+          "name": "reviewer_report_streamed",
+          "description": "stdout contains the reviewer shim output (e.g. 'SHIM-REVIEW', 'Important: foo')"
+        },
+        {
+          "name": "state_iteration_incremented",
+          "description": ".claude/code-review.local.md shows iteration: 4"
+        },
+        {
+          "name": "state_max_raised",
+          "description": ".claude/code-review.local.md shows max_iterations: 5"
+        },
+        {
+          "name": "state_head_and_base_sha",
+          "description": "base_revision and head_sha in state are 40-char hex SHAs"
+        },
+        {
+          "name": "report_persisted",
+          "description": ".claude/code-review.last-report.md contains the shim reviewer output"
+        },
+        {
+          "name": "copilot_invoked_with_model",
+          "description": "copilot.js was spawned once with '--model gpt-5.4'"
+        },
+        {
+          "name": "copilot_prompt_has_range",
+          "description": "the prompt passed to copilot.js contains a 'sha..sha' git range"
+        },
+        {
+          "name": "copilot_prompt_has_exclusion",
+          "description": "the prompt passed to copilot.js contains 'REVIEW SCOPE — EXCLUSIONS'"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "name": "continue-loop-rejects-without-new-diff",
+      "prompt": "Setup: git repo with a committed file, clean working tree, HEAD unchanged. .claude/code-review.local.md with iteration:3, max_iterations:3, head_sha = current HEAD. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js --max-iterations 5.",
+      "expected_output": "Exit code 1. stderr contains 'No new changes since iteration 3'. State file is COMPLETELY unchanged (iteration 3, max_iterations 3, head_sha unchanged). Copilot is NOT invoked.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_new_changes_message",
+          "description": "stderr contains 'No new changes since iteration 3'"
+        },
+        {
+          "name": "exit_code_one",
+          "description": "exit code is 1"
+        },
+        {
+          "name": "state_completely_unchanged",
+          "description": ".claude/code-review.local.md is byte-identical to the pre-run state (iteration 3, max_iterations 3, head_sha unchanged)"
+        },
+        {
+          "name": "no_copilot_invocation",
+          "description": "copilot.js is not spawned"
         }
       ]
     }
