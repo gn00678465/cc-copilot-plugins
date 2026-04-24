@@ -120,13 +120,13 @@ async function main() {
 
   if (maxIterations > 0 && iteration >= maxIterations) {
     // Loop is suspended, not terminated. State is preserved so the user can
-    // inspect the last iteration, raise max_iterations to continue, or run
-    // /cancel-review to discard. We do NOT auto-clear state here.
+    // resume via /continue-loop or discard via /cancel-review. We do NOT
+    // auto-clear state here.
     process.stdout.write(
       `🛑 Code review loop: max iterations (${maxIterations}) reached at ` +
       `iteration ${iteration}. Loop suspended; state preserved.\n` +
-      `  - To discard state, run /cancel-review.\n` +
-      `  - To continue, raise max_iterations in .${mode}/code-review.local.md.\n`
+      `  - To continue, run /continue-loop --max-iterations <N>  (N > ${iteration}).\n` +
+      `  - To discard state, run /cancel-review.\n`
     );
     return;
   }

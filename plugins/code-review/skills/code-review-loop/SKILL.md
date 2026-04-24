@@ -78,7 +78,7 @@ node "${CLAUDE_PLUGIN_ROOT}/skills/code-review-loop/scripts/reviewer.js" $ARGUME
 3. **Stop hook** fires and, in order:
    1. Reads `.<mode>/code-review.last-report.md`. If its final non-empty line is `<promise>APPROVAL</promise>`, the loop ends cleanly and **state is cleared**.
    2. Otherwise, snapshots the new diff, re-invokes the Copilot reviewer on `git range: <base>..<head>` with the same approval protocol injected, and **overwrites** the report file with the new report. The new report is fed back to you as the next prompt.
-4. **Exit** — the loop only *terminates and clears state* when the reviewer's latest report ends with the terminator token. If `--max-iterations` is reached without approval, the loop is **suspended**: state is preserved so you can inspect the last iteration, raise `max_iterations` to continue, or run `/cancel-review` to discard the state explicitly.
+4. **Exit** — the loop only *terminates and clears state* when the reviewer's latest report ends with the terminator token. If `--max-iterations` is reached without approval, the loop is **suspended**: state is preserved so you can run `/continue-loop --max-iterations <N>` to resume (raises the cap and immediately triggers the next review), inspect the state file manually, or run `/cancel-review` to discard it explicitly.
 
 At every iteration the division of labour is:
 
