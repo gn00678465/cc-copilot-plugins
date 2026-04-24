@@ -216,7 +216,13 @@ function printMissionStart(opts) {
       `To monitor: head -10 .${mode}/code-review.local.md`,
       '',
       '⚠️  WARNING: By default this loop is bounded by --max-iterations (default: 3).',
-      '    Use --max-iterations 0 for unlimited; run /cancel-review to stop early.',
+      '    Use --max-iterations 0 for unlimited. To stop early:',
+      ...(mode === 'claude'
+        ? ['      - Run /cancel-review (clears .claude/code-review.local.md + last-report.md).']
+        : [
+            `      - /cancel-review only clears .claude/; started with --mode ${mode}, so`,
+            `        remove .${mode}/code-review.local.md and .${mode}/code-review.last-report.md manually.`,
+          ]),
       '',
       '🔄',
       '',
