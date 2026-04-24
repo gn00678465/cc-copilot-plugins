@@ -152,6 +152,39 @@ function clearState(stateFile) {
 }
 
 // ---------------------------------------------------------------------------
+// Incremental-diff range computation
+//
+// Returns { base, head } for the next review iteration given the last-seen
+// head in state. Preference order:
+//   1. Working-tree snapshot via `git stash create` (uncommitted fixes).
+//   2. Current HEAD if it has advanced since last iteration (writer committed).
+//   3. Nothing new — return { reason: 'no-diff' } so callers can reject or
+//      hold position.
+//
+// prevRef falls back to initial_head when head_sha is still null (e.g. the
+// loop is still on its first iteration but /continue-loop was invoked).
+// ---------------------------------------------------------------------------
+function computeNextRange(state, workspaceRoot) {
+  const prevRef = (typeof state.head_sha === 'string' && state.head_sha)
+    ? state.head_sha
+    : (typeof state.initial_head === 'string' && state.initial_head)
+    ? state.initial_head
+    : null;
+
+  const snapshot = gitStashCreate(workspaceRoot);
+  if (snapshot) {
+    return { base: prevRef || gitHeadCommit(workspaceRoot), head: snapshot };
+  }
+
+  const currentHead = gitHeadCommit(workspaceRoot);
+  if (currentHead && prevRef && currentHead !== prevRef) {
+    return { base: prevRef, head: currentHead };
+  }
+
+  return { base: null, head: null, reason: 'no-diff' };
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -171,4 +204,5 @@ module.exports = {
   loadState,
   saveState,
   clearState,
+  computeNextRange,
 };

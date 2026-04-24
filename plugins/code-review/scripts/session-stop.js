@@ -38,8 +38,6 @@ const { execFileSync } = require('child_process');
 
 const {
   hasApprovalInReport,
-  gitStashCreate,
-  gitHeadCommit,
   resolveWorkspaceRoot,
   resolveStateFile,
   resolveReportFile,
@@ -49,6 +47,7 @@ const {
   loadState,
   saveState,
   clearState,
+  computeNextRange,
 } = require(
   path.resolve(__dirname, '..', 'skills', 'code-review-loop', 'scripts', 'iterate.js')
 );
@@ -173,44 +172,19 @@ async function main() {
     return;
   }
 
-  // Not approved — snapshot working tree, roll sliding window, block the stop
-
-  // 1) Snapshot current working tree.
-  //    If working tree is clean (stash create returns empty), check whether HEAD
-  //    moved since the last iteration — the agent may have committed their changes.
-  let snapshot = gitStashCreate(workspaceRoot);
-
-  if (!snapshot) {
-    const currentHead = gitHeadCommit(workspaceRoot);
-    const prevRef = (typeof state.head_sha === 'string' && state.head_sha)
-      ? state.head_sha
-      : (typeof state.initial_head === 'string' && state.initial_head)
-      ? state.initial_head
-      : null;
-
-    if (currentHead && prevRef && currentHead !== prevRef) {
-      // Agent committed changes — use HEAD as the snapshot reference
-      snapshot = currentHead;
-    } else {
-      // No diff to review this round. The writer may still be mid-fix.
-      // Preserve state AND the existing reviewer report (still authoritative
-      // for the next Stop event); do not bump iteration.
-      process.stderr.write(
-        `⚠️  Code review loop: no changes detected since iteration ${iteration}. ` +
-        `Address the reviewer's findings before exiting, or run /cancel-review ` +
-        `to end the loop. State preserved.\n`
-      );
-      return;
-    }
+  // Not approved — compute the incremental diff range and block the stop.
+  const range = computeNextRange(state, workspaceRoot);
+  if (range.reason === 'no-diff') {
+    process.stderr.write(
+      `⚠️  Code review loop: no changes detected since iteration ${iteration}. ` +
+      `Address the reviewer's findings before exiting, or run /cancel-review ` +
+      `to end the loop. State preserved.\n`
+    );
+    return;
   }
 
-  // 2) Sliding window: base = previous head_sha (or HEAD commit on first rotation),
-  //    head = new snapshot
-  const prevHead = (typeof state.head_sha === 'string' && state.head_sha)
-    ? state.head_sha
-    : null;
-  const newBase = prevHead ?? gitHeadCommit(workspaceRoot);
-  const newHead = snapshot;
+  const newBase = range.base;
+  const newHead = range.head;
 
   if (!newBase) {
     // Environmental error — no HEAD commit. Don't nuke state; let the user
