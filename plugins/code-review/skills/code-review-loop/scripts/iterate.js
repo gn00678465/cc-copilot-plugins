@@ -22,9 +22,12 @@ function hasApprovalInReport(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   let i = lines.length - 1;
+  // Skip purely blank trailing lines (whitespace-only counts as blank).
   while (i >= 0 && lines[i].trim() === '') i--;
   if (i < 0) return false;
-  return APPROVAL_LINE_PATTERN.test(lines[i].trim());
+  // Compare the raw line — the contract is an *exact* token on its own
+  // final line; any leading/trailing whitespace fails the match.
+  return APPROVAL_LINE_PATTERN.test(lines[i]);
 }
 
 // ---------------------------------------------------------------------------
