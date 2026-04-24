@@ -1,16 +1,20 @@
 # code-review Plugin
 
-Professional code review loop plugin for Claude Code. Launches an automated review-fix cycle powered by a Copilot CLI subagent acting as the reviewer. The session keeps looping until the reviewer issues `<promise>APPROVAL</promise>` or the iteration limit is reached.
+Automated code review loop plugin for Claude Code. It keeps the **writer/fixer** role inside Claude Code separate from the **reviewer** role handled by a Copilot CLI subagent, so the author never reviews their own work.
+
+The loop terminates only when the reviewer's persisted report ends with the exact terminator token on its final non-empty line:
+
+```text
+<promise>APPROVAL</promise>
+```
 
 ## Prerequisites
 
-**Copilot CLI must be installed and available in `PATH` before using this plugin.**
+- Claude Code with plugin support enabled
+- `copilot` CLI installed and available on `PATH`
+- A git repository (the loop snapshots diffs between iterations)
 
-The `code-review-and-quality` skill delegates the actual review work to the Copilot CLI. Without it the loop cannot start.
-
-### Install Copilot CLI
-
-Follow the official installation guide for your platform, then verify:
+Verify Copilot CLI:
 
 ```bash
 copilot --version
@@ -18,10 +22,10 @@ copilot --version
 
 ## Installation
 
-Install the plugin via Claude Code:
+Install the plugin from this marketplace repository:
 
-```
-/plugin marketplace add <path-to-cc-copilot-plugins>
+```text
+/plugin marketplace add gn00678465/cc-copilot-plugins
 /plugin install code-review@cc-copilot-plugins
 /reload-plugins
 ```
@@ -30,86 +34,138 @@ Install the plugin via Claude Code:
 
 ### `/code-review-loop`
 
-Starts an automated review-fix loop.
+Starts the automated review-fix loop.
 
-**Syntax**
-
-```
-/code-review-loop PROMPT [--max-iterations N] [--model MODEL] [--mode claude|copilot]
+```text
+/code-review-loop PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `PROMPT` | *(required)* | Review context — what to review and any specific concerns |
-| `--max-iterations N` | `3` | Stop automatically after N iterations. Pass `0` for unlimited. |
-| `--model MODEL` | `gpt-5.4` | Copilot model used by the reviewer subagent |
-| `--mode claude\|copilot` | `claude` | Dot-directory to use for state (`.claude/` or `.copilot/`) |
+| `PROMPT` | *(required)* | Review context, target scope, or specific concerns |
+| `--max-iterations N` | `3` | Maximum review iterations before the loop is suspended; use `0` for unlimited |
+| `--model MODEL_NAME` | `gpt-5.4` | Copilot model used by the reviewer subagent |
+| `--mode claude\|copilot` | `claude` | State/report directory written by the scripts: `.claude\` or `.copilot\` |
 
 **Examples**
 
-```
+```text
 /code-review-loop Review the staged changes for quality
 /code-review-loop Review the auth module for security issues --max-iterations 5
-/code-review-loop Refactor cache layer --model gpt-5-mini --max-iterations 10
+/code-review-loop Refactor cache layer --model gpt-5-mini --max-iterations 0
 ```
 
-**How the loop works**
+### `/continue-loop`
 
-1. `reviewer.js` writes session state to `.claude/code-review.local.md` and prints the startup banner.
-2. The Copilot CLI subagent (`copilot.js`) runs with your prompt and the internal review plugin, conducting a five-axis review (correctness, readability, architecture, security, performance).
-3. When you try to exit, the Stop hook (`session-stop.js`) intercepts:
-   - If the reviewer output contains `<promise>APPROVAL</promise>` → session ends cleanly.
-   - Otherwise → iteration counter increments and the same prompt is fed back for the next round.
-4. The loop exits when Approval is received or `--max-iterations` is reached.
+Continues a running or suspended loop — immediately re-runs the Copilot reviewer on the writer's latest diff, advances `iteration`, and optionally raises the cap. Symmetric with `/cancel-review`: one extends the loop, the other discards it.
 
-**Completion signal**
-
-The reviewer subagent must output this exact tag to approve:
-
+```text
+/continue-loop [--max-iterations N]
 ```
-<promise>APPROVAL</promise>
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--max-iterations N` | *(unchanged)* | New **absolute** cap (not additive). Required when the loop is already at its cap. `N = 0` means unlimited; otherwise `N` must be greater than the current `iteration`. |
+
+**When to use**
+
+- The loop was suspended after hitting `--max-iterations` and you want to resume it.
+- The loop is still running under the current cap but you want to re-run the reviewer on new fixes now, without waiting for the Stop hook.
+- You want to raise the cap mid-loop.
+
+**Examples**
+
+```text
+/continue-loop
+/continue-loop --max-iterations 5
 ```
+
+State lifecycle is unchanged: `/continue-loop` **never clears state**. Only reviewer approval (detected by the Stop hook) clears state. Use `/cancel-review` to discard explicitly.
+
+**Mode caveat.** The packaged Stop hook is wired for `--mode claude` only. If the loop was started with `--mode copilot`, `/continue-loop` still loads and advances state from `.copilot\code-review.local.md` correctly, but the Stop hook will not roll the next iteration automatically — wire the matching hook yourself (see the *Stop hook* section below).
 
 ### `/cancel-review`
 
-Cancels an active review loop immediately.
+Cancels an active loop and removes the plugin state/report files.
 
-```
+```text
 /cancel-review
 ```
 
-Removes `.claude/code-review.local.md` and reports the iteration the loop was cancelled at. Safe to call even when no loop is active.
+If no active loop exists, the skill reports that nothing is running. In the packaged plugin configuration, `/cancel-review` clears the default `.claude\code-review.local.md` and `.claude\code-review.last-report.md` files.
 
-## Monitoring
+## Role separation
 
-```bash
-# Check current iteration and state
-head -10 .claude/code-review.local.md
+Inside `/code-review-loop` the roles are intentionally split:
 
-# Watch state file live
-Get-Content .claude/code-review.local.md -Wait   # PowerShell
-```
+- **Reviewer**: external Copilot CLI subagent
+- **Writer / fixer**: the current Claude Code session
 
-The state file uses YAML frontmatter:
+Only the reviewer is allowed to emit `<promise>APPROVAL</promise>`. The writer/fixer must only read the report, fix the flagged issues, and exit the turn so the Stop hook can decide whether to continue.
+
+## How the loop works
+
+1. `reviewer.js` creates `.<mode>\code-review.local.md` with YAML frontmatter and immediately invokes the Copilot reviewer.
+2. The reviewer's full output is streamed back into the session and persisted to `.<mode>\code-review.last-report.md`.
+3. You fix the reported `Critical` and `Important` findings, then end your turn.
+4. When Claude Code tries to exit, `session-stop.js` runs:
+   - If `code-review.last-report.md` ends with `<promise>APPROVAL</promise>` on its final non-empty line, the hook clears state/report files and allows exit.
+   - If `--max-iterations` has been reached, the loop is **suspended** and state is preserved. Run `/continue-loop [--max-iterations N]` to resume, or `/cancel-review` to discard.
+   - Otherwise, the hook snapshots the new diff, increments the iteration, re-runs the reviewer on `git diff <base>..<head>`, and overwrites the persisted report for the next round.
+5. The cycle repeats until the reviewer approves or you explicitly cancel the loop.
+
+## State files
+
+The plugin stores loop state in `.<mode>\code-review.local.md` and the latest reviewer output in `.<mode>\code-review.last-report.md`.
+
+Example state file:
 
 ```yaml
 ---
 active: true
 iteration: 2
-max_iterations: 5
+max_iterations: 3
 completion_promise: "APPROVAL"
-started_at: "2026-04-21T00:00:00Z"
+started_at: "2026-04-23T08:52:12Z"
+model: "gpt-5.4"
+mode: "claude"
+base_revision: "20a94c9902b594ae982cc58744478a61a5a378af"
+head_sha: "ea21647a2a1d2e1a2dbcac48753b17373b6f3b2c"
+initial_head: "20a94c9902b594ae982cc58744478a61a5a378af"
 ---
 
-Your original prompt here
+Review the staged changes for quality
 ```
 
-## Stop Hook
+## Monitoring
 
-The plugin registers a Stop hook that runs automatically when Claude Code exits:
+```powershell
+# Inspect current state
+Get-Content .claude\code-review.local.md -TotalCount 20
 
+# Inspect the latest reviewer report
+Get-Content .claude\code-review.last-report.md -Tail 40
 ```
+
+If you start the loop with `--mode copilot`, inspect `.copilot\` instead of `.claude\`.
+
+## Stop hook
+
+The plugin registers a Stop hook:
+
+```text
 node ${CLAUDE_PLUGIN_ROOT}/scripts/session-stop.js claude
 ```
 
-The hook reads `.claude/code-review.local.md`, checks the last assistant message for the Approval tag, and either allows exit or blocks it with a continuation prompt.
+The packaged hook reads `.claude\code-review.last-report.md` as the source of truth for approval. It does **not** inspect the writer/fixer's last message, which avoids false positives from quoted or paraphrased approval text.
+
+If you want to run the loop against `.copilot\`, you must also wire the matching hook command yourself:
+
+```text
+node ${CLAUDE_PLUGIN_ROOT}/scripts/session-stop.js copilot
+```
+
+## Roadmap
+
+1. Fix `--mode copilot` so the packaged hook and related skills work out of the box with `.copilot\`.
+2. Explore switching the reviewer invocation from the current CLI flow to `copilot --acp`.
