@@ -1,0 +1,11 @@
+{
+    "name": "code-review",
+    "version": "0.1.0",
+    "description": "Professional code review loop plugin with automated reviewer relay",
+    "author": {
+        "name": "gn00678465",
+        "email": "gn00678465@gmail.com"
+    },
+    "skills": ["skills/"],
+    "hooks": "hooks/hooks.json"
+}

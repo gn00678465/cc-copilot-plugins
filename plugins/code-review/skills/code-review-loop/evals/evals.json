@@ -1,0 +1,652 @@
+{
+  "skill_name": "code-review-loop",
+  "evals": [
+    {
+      "id": 1,
+      "name": "startup-state-file-schema",
+      "prompt": "Run: node plugins/code-review/skills/code-review-loop/scripts/reviewer.js 'review staged changes for quality' --max-iterations 3 --model gpt-5.4 --mode claude in the project root. Capture stdout and the contents of .claude/code-review.local.md. If Copilot CLI is unavailable, kill the command after the banner is printed (banner is written before copilot.js is spawned).",
+      "expected_output": "Startup banner printed with 'Code Review Loop activated'. .claude/code-review.local.md exists with YAML frontmatter containing active:true, iteration:1, max_iterations:3, completion_promise:APPROVAL, model:'gpt-5.4', mode:'claude', started_at (ISO), and a body containing the original prompt.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "startup_banner_printed",
+          "description": "stdout contains 'Code Review Loop activated in this session!'"
+        },
+        {
+          "name": "state_file_created",
+          "description": ".claude/code-review.local.md exists after running the script"
+        },
+        {
+          "name": "state_active_true",
+          "description": "frontmatter contains 'active: true'"
+        },
+        {
+          "name": "state_iteration_one",
+          "description": "frontmatter contains 'iteration: 1'"
+        },
+        {
+          "name": "state_max_iterations_three",
+          "description": "frontmatter contains 'max_iterations: 3'"
+        },
+        {
+          "name": "state_completion_promise_approval",
+          "description": "frontmatter contains 'completion_promise: \"APPROVAL\"'"
+        },
+        {
+          "name": "state_model_persisted",
+          "description": "frontmatter contains 'model: \"gpt-5.4\"' so the stop hook can re-invoke the same reviewer"
+        },
+        {
+          "name": "state_mode_persisted",
+          "description": "frontmatter contains 'mode: \"claude\"'"
+        },
+        {
+          "name": "prompt_in_body",
+          "description": "state file body contains 'review staged changes for quality'"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "startup-banner-role-and-approval-ownership",
+      "prompt": "Run: node plugins/code-review/skills/code-review-loop/scripts/reviewer.js 'review staged changes' --max-iterations 1 --model gpt-5.4 --mode claude and capture stdout. Verify the banner establishes writer/reviewer separation AND declares the approval token as reviewer-exclusive.",
+      "expected_output": "Banner contains the 'ROLE SEPARATION — STRICT' block, forbids self-review, AND explicitly forbids the writer session from emitting <promise>APPROVAL</promise> (declares it reviewer-exclusive and reports that the stop hook inspects the reviewer's persisted report, not the writer's messages).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "banner_role_separation_header",
+          "description": "stdout contains 'ROLE SEPARATION — STRICT'"
+        },
+        {
+          "name": "banner_forbids_self_review",
+          "description": "stdout contains 'MUST NOT conduct the code review yourself'"
+        },
+        {
+          "name": "banner_forbids_writer_emitting_approval",
+          "description": "stdout contains a clause forbidding the writer from emitting the approval token (e.g. 'YOU MUST NOT emit <promise>APPROVAL</promise>' or 'reserved for the Copilot reviewer exclusively')"
+        },
+        {
+          "name": "banner_explains_reviewer_owns_terminator",
+          "description": "stdout states the loop terminates only when the REVIEWER\\'s report ends with the literal token"
+        },
+        {
+          "name": "banner_mentions_persisted_report",
+          "description": "stdout references that the reviewer's report is persisted, or that the stop hook inspects the report rather than the writer's messages"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "copilot-js-injects-approval-protocol",
+      "prompt": "Load plugins/code-review/skills/code-review-loop/scripts/copilot.js as a module and assert that it exports `wrapReviewerPrompt`. Call `wrapReviewerPrompt('REVIEW THIS DIFF')` and inspect the returned string. This is the exact prompt body forwarded to Copilot CLI.",
+      "expected_output": "The wrapped prompt starts with the user's literal prompt ('REVIEW THIS DIFF') and ends with an approval protocol that instructs Copilot to emit `<promise>APPROVAL</promise>` alone on the final line if and only if the iteration passes, and to backtick-quote the token in any other mention.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "user_prompt_preserved_at_start",
+          "description": "wrapReviewerPrompt('REVIEW THIS DIFF') returns a string that begins with 'REVIEW THIS DIFF'"
+        },
+        {
+          "name": "protocol_mentions_loop_termination",
+          "description": "wrapped prompt contains the phrase 'LOOP TERMINATION PROTOCOL'"
+        },
+        {
+          "name": "protocol_instructs_terminator_only_on_pass",
+          "description": "wrapped prompt instructs Copilot to emit <promise>APPROVAL</promise> 'if and only if' (or equivalent hard conditional) the iteration passes review"
+        },
+        {
+          "name": "protocol_instructs_final_line_alone",
+          "description": "wrapped prompt says the token must be on the FINAL line of the output with nothing else on that line"
+        },
+        {
+          "name": "protocol_instructs_backtick_quote_when_discussing",
+          "description": "wrapped prompt instructs Copilot to wrap the token in backticks when mentioning it in prose or examples"
+        },
+        {
+          "name": "protocol_reserves_tag_for_reviewer",
+          "description": "wrapped prompt states the writer/fixer session will NOT emit the tag — only the reviewer terminates the loop"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "iteration1-persists-reviewer-report-to-disk",
+      "prompt": "Run reviewer.js with any prompt and --model <any model> --mode claude. Intercept or replace copilot.js with a stub that prints a known reviewer-style report to stdout (e.g., 'Mock review\\nImportant: bar\\n'). Verify that after reviewer.js exits, .claude/code-review.last-report.md exists and contains the captured stdout.",
+      "expected_output": ".claude/code-review.last-report.md exists after iteration 1, contains the reviewer's full stdout verbatim (streamed output was both echoed to terminal AND persisted).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "report_file_created_after_iteration1",
+          "description": ".claude/code-review.last-report.md exists after reviewer.js exits"
+        },
+        {
+          "name": "report_file_content_matches_reviewer_stdout",
+          "description": "report file contents match the captured Copilot stdout byte-for-byte (no re-formatting)"
+        },
+        {
+          "name": "reviewer_stdout_also_streamed_to_terminal",
+          "description": "reviewer.js still prints the reviewer's output to its own stdout (tee behaviour — the writer can still see the report in the conversation)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "stop-hook-approval-via-report-file",
+      "prompt": "Test: stop hook approves the loop ONLY when the reviewer's persisted report ends with the terminator on its own final non-empty line. Steps: (1) Create a throwaway git repo with a committed file. (2) Create .claude/code-review.local.md (active, iteration:1, max_iterations:3, model:'gpt-5.4', mode:'claude'). (3) Create .claude/code-review.last-report.md whose final non-empty line is exactly '<promise>APPROVAL</promise>'. (4) Run: echo '{\"transcript_path\":\"\",\"cwd\":\"<repo>\",\"last_assistant_message\":\"anything — should be ignored\"}' | node plugins/code-review/scripts/session-stop.js claude.",
+      "expected_output": "stdout contains '✅ Code review loop: Reviewer issued APPROVAL in its latest report.' Both .claude/code-review.local.md and .claude/code-review.last-report.md are deleted. Exit code 0. No 'decision' JSON emitted.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "approval_message_emitted",
+          "description": "stdout contains '✅ Code review loop: Reviewer issued APPROVAL in its latest report.'"
+        },
+        {
+          "name": "state_file_cleared_on_approval",
+          "description": ".claude/code-review.local.md is deleted"
+        },
+        {
+          "name": "report_file_cleared_on_approval",
+          "description": ".claude/code-review.last-report.md is deleted"
+        },
+        {
+          "name": "no_block_decision_on_approval",
+          "description": "stdout does not contain '\"decision\":'"
+        },
+        {
+          "name": "approval_source_is_report_file",
+          "description": "approval is granted regardless of last_assistant_message contents — the writer's message is not consulted (i.e. the hook still approves even when last_assistant_message is empty or contradictory)"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "stop-hook-ignores-writer-emitted-approval-token",
+      "prompt": "Regression test for the ambiguity-prose bug. Test: the writer cannot end the loop by emitting the terminator themselves. Setup same as test 5 but: (a) create .claude/code-review.last-report.md WITHOUT the terminator (e.g. 'Important: fix foo()'), and (b) set last_assistant_message to a writer message that quotes '<promise>APPROVAL</promise>'. Also make a working-tree change so the block path can fire. Run the hook.",
+      "expected_output": "The hook does NOT approve. It either emits a block decision (if Copilot is available and produces a non-approving report) or blocks with a fallback reason (if Copilot fails). It never emits '✅ Code review loop: Reviewer issued APPROVAL'. The state file is NOT deleted by the approval path.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_false_approval_from_writer_message",
+          "description": "stdout does NOT contain '✅ Code review loop: Reviewer issued APPROVAL'"
+        },
+        {
+          "name": "block_path_or_fallback_fires",
+          "description": "stdout contains a block decision (JSON with decision:block) OR the state file remains and iteration was incremented"
+        },
+        {
+          "name": "state_file_not_cleared_by_approval_path",
+          "description": ".claude/code-review.local.md was not deleted by the approval branch (it may be overwritten by the block branch with a new iteration)"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "stop-hook-pattern-rejects-tag-not-on-final-line",
+      "prompt": "Verify the strict last-line-alone matcher. Setup: state file present, working tree has uncommitted changes. Create .claude/code-review.last-report.md with content that contains '<promise>APPROVAL</promise>' in the middle of prose AND on the final line but WITH trailing prose after it. Run the stop hook.",
+      "expected_output": "The hook does NOT approve. Proceeds to block path. The pattern must only match when the terminator is the final non-empty line alone.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "tag_in_prose_middle_rejected",
+          "description": "Given a report whose middle line contains <promise>APPROVAL</promise> inside a sentence, the hook does not emit the approval message"
+        },
+        {
+          "name": "tag_with_trailing_prose_rejected",
+          "description": "Given a report whose final non-empty line is NOT the token (but an earlier line is), the hook does not emit the approval message"
+        },
+        {
+          "name": "tag_in_backticks_rejected",
+          "description": "Given a report whose final non-empty line is e.g. '`<promise>APPROVAL</promise>`' with backticks, the hook does not emit the approval message"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "stop-hook-block-rolls-state-and-persists-new-report",
+      "prompt": "Test: on iteration 2+, the stop hook (i) rolls state, (ii) re-invokes Copilot with the persisted model, (iii) writes the new report to .claude/code-review.last-report.md (or clears it on failure so stale tags cannot carry over). Setup: repo with diff + state file (iteration:1, model:'gpt-5.4') + existing report file. Run the hook.",
+      "expected_output": "stdout contains a JSON block decision. State file iteration becomes 2 with base_revision and head_sha populated (40-hex SHAs). The report file now reflects the NEW reviewer run (content replaced) OR was deleted if the invocation failed — the old report content must NOT remain unchanged on disk.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "block_decision_emitted",
+          "description": "stdout parses as JSON and has decision === 'block'"
+        },
+        {
+          "name": "iteration_incremented_to_2",
+          "description": "state file frontmatter shows iteration:2"
+        },
+        {
+          "name": "base_and_head_are_sha",
+          "description": "base_revision and head_sha are 40-char hex strings"
+        },
+        {
+          "name": "report_file_overwritten_or_cleared",
+          "description": "After the hook runs, .claude/code-review.last-report.md either contains the new reviewer output (different from the pre-existing stub content) OR has been deleted (Copilot invocation failed). It must NOT retain stale pre-existing content."
+        },
+        {
+          "name": "system_message_announces_persistence_state",
+          "description": "decision.systemMessage contains 'Reviewer: Copilot report persisted' or 'Reviewer: invocation failed — report cleared'"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "stop-hook-block-reason-forbids-self-review-and-self-approval",
+      "prompt": "Inspect the decision.reason emitted on the block path (setup same as test 8). Regardless of Copilot availability, the reason must (a) forbid self-review by the writer, and (b) forbid the writer from emitting the approval token.",
+      "expected_output": "decision.reason contains both prohibitions: 'DO NOT conduct your own review' or 'Do NOT review the diff yourself', AND 'DO NOT emit `<promise>APPROVAL</promise>`' or 'Do NOT emit the approval token'.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "reason_forbids_self_review",
+          "description": "decision.reason contains 'DO NOT conduct your own review' or 'Do NOT review the diff yourself' or 'Do NOT analyze the diff yourself'"
+        },
+        {
+          "name": "reason_forbids_writer_emitting_token",
+          "description": "decision.reason contains 'DO NOT emit `<promise>APPROVAL</promise>`' or 'Do NOT emit the approval token'"
+        },
+        {
+          "name": "reason_mentions_reviewer_owns_termination",
+          "description": "decision.reason contains a phrase like 'the stop hook inspects the persisted reviewer report', 'reserved for the reviewer', or 'Only the reviewer can terminate the loop'"
+        },
+        {
+          "name": "reason_never_instructs_writer_to_judge",
+          "description": "decision.reason does NOT contain imperatives telling the writer to judge approval, e.g. 'Output <promise>APPROVAL</promise> ONLY if ...' addressed to the writer session"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "stop-hook-uses-persisted-model",
+      "prompt": "Verify the stop hook spawns copilot.js with the model from state (not a hard-coded default). Setup as test 8 but with state.model = 'probe-model-xyz'. Intercept the copilot.js invocation (shim copilot.js to log argv, or inspect stderr from a failing invocation which echoes the model name).",
+      "expected_output": "copilot.js receives '--model probe-model-xyz'. On failure, the fallback decision.reason references that same model string.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "copilot_invoked_with_persisted_model",
+          "description": "The spawned copilot.js process is given --model probe-model-xyz"
+        },
+        {
+          "name": "fallback_reason_references_probe_model",
+          "description": "If invocation fails, decision.reason contains '--model probe-model-xyz'"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "stop-hook-max-iterations-suspends-loop-preserving-state",
+      "prompt": "Verify the max-iterations exit path SUSPENDS the loop without clearing state. Setup: .claude/code-review.local.md with iteration:3, max_iterations:3, active:true, model/mode set, and a .claude/code-review.last-report.md present (without terminator). Run: echo '{\"transcript_path\":\"\",\"cwd\":\"<repo>\",\"last_assistant_message\":\"...\"}' | node plugins/code-review/scripts/session-stop.js claude.",
+      "expected_output": "stdout contains 'max iterations (3) reached at iteration 3. Loop suspended; state preserved.' and instructions mentioning /continue-loop AND /cancel-review. Both state and report files REMAIN on disk. Exit code 0. Copilot is NOT invoked. Only a confirmed APPROVAL (id:5) is allowed to clear state.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "suspension_message_with_limits",
+          "description": "stdout contains 'max iterations (3) reached at iteration 3' and 'Loop suspended; state preserved.'"
+        },
+        {
+          "name": "message_mentions_cancel_review",
+          "description": "stdout contains '/cancel-review' as the documented way to discard state"
+        },
+        {
+          "name": "message_mentions_continue_loop",
+          "description": "stdout contains '/continue-loop' and indicates --max-iterations N is the way to raise the cap"
+        },
+        {
+          "name": "state_file_preserved",
+          "description": ".claude/code-review.local.md still exists after the hook runs (state management rule: only APPROVAL clears state)"
+        },
+        {
+          "name": "report_file_preserved",
+          "description": ".claude/code-review.last-report.md still exists after the hook runs"
+        },
+        {
+          "name": "no_block_decision",
+          "description": "stdout does not contain '\"decision\":' (the hook allows exit; user decides next action)"
+        },
+        {
+          "name": "no_copilot_invocation",
+          "description": "copilot.js is not spawned on the max-iterations exit path"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "stop-hook-no-changes-preserves-state-and-does-not-bump-iteration",
+      "prompt": "Verify the 'no changes detected' path preserves state and does NOT bump iteration. Setup: throwaway git repo, single committed file, clean working tree, HEAD unchanged since initial_head. .claude/code-review.local.md with iteration:1, max_iterations:5, initial_head set to HEAD. .claude/code-review.last-report.md present (without terminator). Run the stop hook.",
+      "expected_output": "stderr contains a message like 'no changes detected since iteration 1. Address the reviewer's findings ...'. State file and report file both remain on disk. Iteration in state remains 1 (NOT bumped). Exit code 0. No block decision emitted. Copilot is NOT invoked (no diff to review).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_changes_warning_emitted",
+          "description": "stderr contains 'no changes detected since iteration 1'"
+        },
+        {
+          "name": "state_preserved_on_no_changes",
+          "description": ".claude/code-review.local.md still exists"
+        },
+        {
+          "name": "report_preserved_on_no_changes",
+          "description": ".claude/code-review.last-report.md still exists (the previous review verdict is still authoritative)"
+        },
+        {
+          "name": "iteration_not_bumped_on_no_changes",
+          "description": "state file iteration remains 1 — this path must not consume an iteration slot"
+        },
+        {
+          "name": "no_block_decision_on_no_changes",
+          "description": "stdout does not contain '\"decision\":'"
+        },
+        {
+          "name": "no_copilot_invocation_on_no_changes",
+          "description": "copilot.js is not spawned because there is nothing new to review"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "stop-hook-corrupt-state-warns-without-auto-delete",
+      "prompt": "Verify that a corrupt or unparseable state file is NOT auto-deleted. Setup: write garbage to .claude/code-review.local.md whose frontmatter fails to parse (e.g. unterminated YAML or binary bytes). Run the stop hook.",
+      "expected_output": "stderr contains a warning like 'failed to parse ... corrupt — inspect it manually or run /cancel-review to discard it.' Exit code 0. The corrupt state file REMAINS on disk — the user must decide whether to fix or discard. Only APPROVAL clears state.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "corrupt_state_warning_emitted",
+          "description": "stderr contains 'corrupt' and '/cancel-review'"
+        },
+        {
+          "name": "corrupt_state_file_preserved",
+          "description": ".claude/code-review.local.md is NOT deleted even when unparseable (state management rule)"
+        },
+        {
+          "name": "no_block_decision_on_corrupt_state",
+          "description": "stdout does not contain '\"decision\":'"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "startup-default-max-iterations-is-three",
+      "prompt": "Run reviewer.js WITHOUT a --max-iterations flag: node plugins/code-review/skills/code-review-loop/scripts/reviewer.js 'review staged changes' --model gpt-5.4 --mode claude. Inspect the resulting state file.",
+      "expected_output": "The frontmatter contains 'max_iterations: 3'. The help text printed by 'reviewer.js --help' advertises 'default: 3'. Passing '--max-iterations 7' overrides to 7; passing '--max-iterations 0' records 0 (explicit unlimited).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "state_default_max_iterations_three",
+          "description": "When --max-iterations is omitted, .claude/code-review.local.md contains 'max_iterations: 3'"
+        },
+        {
+          "name": "help_advertises_default_three",
+          "description": "reviewer.js --help stdout contains 'default: 3' on the --max-iterations line"
+        },
+        {
+          "name": "max_iterations_override_honoured",
+          "description": "Passing '--max-iterations 7' results in 'max_iterations: 7' in state"
+        },
+        {
+          "name": "explicit_zero_means_unlimited",
+          "description": "Passing '--max-iterations 0' records 'max_iterations: 0' (unlimited opt-in still available)"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "name": "reviewer-prompt-excludes-plugin-state-files",
+      "prompt": "Load copilot.js as a module and call buildExclusionClause(). Verify it explicitly names each plugin state path in both claude and copilot modes, and instructs the reviewer to silently skip them. Also verify that both the iteration-1 path (reviewer.js → copilot.js) and the iteration-2+ path (session-stop.js → copilot.js) concatenate this clause into the prompt that is handed to the Copilot CLI.",
+      "expected_output": "buildExclusionClause() returns a string containing each of '.claude/code-review.local.md', '.claude/code-review.last-report.md', '.copilot/code-review.local.md', '.copilot/code-review.last-report.md', plus the word 'silently' (telling the reviewer to ignore diffs to these files without mentioning them). Both reviewer.js and session-stop.js include this clause in the prompt argv of the spawned copilot.js.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "exclusion_lists_claude_state",
+          "description": "clause contains '.claude/code-review.local.md' and '.claude/code-review.last-report.md'"
+        },
+        {
+          "name": "exclusion_lists_copilot_state",
+          "description": "clause contains '.copilot/code-review.local.md' and '.copilot/code-review.last-report.md'"
+        },
+        {
+          "name": "exclusion_instructs_silently_skip",
+          "description": "clause contains the word 'silently' and 'Do NOT list them as findings'"
+        },
+        {
+          "name": "iteration1_prompt_includes_exclusion",
+          "description": "The prompt argv passed from reviewer.js to copilot.js contains 'REVIEW SCOPE — EXCLUSIONS'"
+        },
+        {
+          "name": "iteration2plus_prompt_includes_exclusion",
+          "description": "The prompt passed from session-stop.js to copilot.js (observable when Copilot fails and stderr echoes the argv) contains 'REVIEW SCOPE — EXCLUSIONS'"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "reviewer-prompt-injects-emotional-stimuli-near-cap",
+      "prompt": "Verify buildLoopContextSuffix(currentIteration, maxIterations) from copilot.js behaves as follows. Unlimited modes (maxIterations <= 0, NaN, undefined) → empty string. Far-from-cap (e.g. iter=1, max=3) → empty string. Near-final (remaining = 1, e.g. iter=2, max=3) → non-empty, mentions 'Only 1 iteration remains' and 'deep breath'. Final (remaining = 0, e.g. iter=3, max=3) → non-empty, mentions 'FINAL iteration' and 'No further retries'. Also verify the raw <promise>APPROVAL</promise> token inside the suffix is backtick-quoted so it cannot accidentally match the terminator pattern. Then verify session-stop.js block path composes this suffix into the reviewer prompt when near the cap.",
+      "expected_output": "Empty suffix for unlimited/far-from-cap. Non-empty suffix with 'deep breath', 'do your best', and 'Please read carefully' in the final 1–2 iterations. Final iteration suffix additionally contains 'FINAL' and 'No further retries'. The literal approval token inside the suffix is enclosed in backticks: `<promise>APPROVAL</promise>`. When a loop with max_iterations=2 runs its second iteration, the session-stop.js argv to copilot.js contains 'ITERATION CONTEXT — PLEASE READ CAREFULLY'.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "unlimited_returns_empty",
+          "description": "buildLoopContextSuffix(1, 0), (1, -1), (1, undefined) all return ''"
+        },
+        {
+          "name": "far_from_cap_returns_empty",
+          "description": "buildLoopContextSuffix(1, 10) returns '' (remaining = 9)"
+        },
+        {
+          "name": "near_final_contains_stimulus",
+          "description": "buildLoopContextSuffix(2, 3) contains 'Only 1 iteration remains', 'deep breath', 'do your best'"
+        },
+        {
+          "name": "final_iteration_contains_no_retries",
+          "description": "buildLoopContextSuffix(3, 3) contains 'FINAL iteration' and 'No further retries'"
+        },
+        {
+          "name": "tag_is_backtick_quoted_in_stimulus",
+          "description": "Any suffix emitted by buildLoopContextSuffix that mentions the approval token does so with surrounding backticks (so the terminator matcher cannot match lines inside the instruction)"
+        },
+        {
+          "name": "session_stop_injects_stimulus_near_cap",
+          "description": "Running session-stop.js with state iteration:1 and max_iterations:2 and a dirty working tree causes the copilot.js argv to include 'ITERATION CONTEXT — PLEASE READ CAREFULLY'"
+        },
+        {
+          "name": "session_stop_does_not_inject_far_from_cap",
+          "description": "Running session-stop.js with state iteration:1 and max_iterations:10 and a dirty working tree does NOT inject 'ITERATION CONTEXT' into the copilot.js argv"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "name": "stop-hook-only-approval-clears-state",
+      "prompt": "Summary invariant test. Run the stop hook under each of these scenarios in sequence and record whether .claude/code-review.local.md survives: (A) APPROVAL in report; (B) max_iterations reached; (C) no-changes; (D) unresolved base_revision; (E) block path with successful Copilot; (F) block path with failed Copilot. In every case except (A), the state file must remain on disk.",
+      "expected_output": "State file clearance matrix: A=cleared; B=preserved; C=preserved; D=preserved; E=preserved (iteration bumped); F=preserved (iteration bumped). The state file is cleared by the stop hook in one and only one scenario: reviewer APPROVAL in the persisted report.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "approval_is_the_only_path_that_clears_state",
+          "description": "Across scenarios A–F, exactly one (A = APPROVAL) results in .claude/code-review.local.md being deleted by the stop hook"
+        },
+        {
+          "name": "non_approval_paths_preserve_state",
+          "description": "Scenarios B, C, D, E, F all leave .claude/code-review.local.md on disk"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "writer-session-never-emits-approval-token",
+      "prompt": "Behavioral eval (transcript audit). Run the skill: /code-review-loop Review src/example.ts for quality --max-iterations 3. Assume Copilot CLI is installed and produces a normal multi-iteration review-fix sequence. Audit EVERY writer-session assistant message across all iterations.",
+      "expected_output": "In every writer assistant message, the exact string '<promise>APPROVAL</promise>' never appears — not even inside code blocks, quotations, or paraphrases. The writer also does not produce its own Critical/Important/Suggestion/Nit findings sections. The loop still terminates correctly (either via reviewer-emitted approval in the persisted report or via max-iterations).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "writer_never_emits_approval_tag",
+          "description": "No writer-role assistant message across the transcript contains the substring '<promise>APPROVAL</promise>' in any form (raw, backticked, or inside a code block)"
+        },
+        {
+          "name": "no_writer_findings_sections",
+          "description": "No writer message contains a heading line matching /^#+\\s*(Critical|Important|Suggestion|Nit)\\s*$/ or a 'My review:' / 'I reviewed' style self-review section"
+        },
+        {
+          "name": "no_exploratory_reads_for_review",
+          "description": "No writer Read/Grep/Glob tool call is issued for the purpose of forming its own review (file access driven by a reviewer-listed fix is allowed)"
+        },
+        {
+          "name": "loop_terminates_via_reviewer_report_or_max_iterations",
+          "description": "The loop ends either (a) because the persisted .claude/code-review.last-report.md ended with the terminator, or (b) because max-iterations was reached. Termination via writer-emitted tag is impossible by design."
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "cancel-review-clears-state-and-report",
+      "prompt": "Invoke /cancel-review when both .claude/code-review.local.md and .claude/code-review.last-report.md exist.",
+      "expected_output": "Both files are removed. The command reports 'Cancelled code review loop (was at iteration N)' using the iteration from state.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "state_file_removed",
+          "description": ".claude/code-review.local.md no longer exists"
+        },
+        {
+          "name": "report_file_removed",
+          "description": ".claude/code-review.last-report.md no longer exists"
+        },
+        {
+          "name": "cancellation_message_with_iteration",
+          "description": "Output contains 'Cancelled code review loop (was at iteration' followed by the numeric iteration"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "name": "continue-loop-rejects-without-active-state",
+      "prompt": "Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js --max-iterations 5 in a fresh git repo with no .claude/code-review.local.md. Capture stdout + stderr + exit code and verify the decision matrix: no active loop path rejects cleanly without side effects.",
+      "expected_output": "Exit code 1. stderr contains 'No active code review loop found'. No state file is created. Copilot is NOT invoked.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_active_loop_message",
+          "description": "stderr contains 'No active code review loop found'"
+        },
+        {
+          "name": "exit_code_one",
+          "description": "exit code is 1"
+        },
+        {
+          "name": "no_state_file_created",
+          "description": "no .claude/code-review.local.md is created by continue.js"
+        },
+        {
+          "name": "no_copilot_invocation",
+          "description": "copilot.js is not spawned"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "name": "continue-loop-rejects-at-cap-without-flag",
+      "prompt": "Setup: git repo with a committed file and .claude/code-review.local.md containing iteration:3, max_iterations:3, active:true, model:'gpt-5.4', mode:'claude'. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js (no flags).",
+      "expected_output": "Exit code 1. stderr contains 'Loop is at its cap (iteration 3 / max 3)' and 'Pass --max-iterations'. State file iteration and max_iterations remain 3. Copilot is NOT invoked.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "at_cap_message",
+          "description": "stderr contains 'at its cap' and 'Pass --max-iterations'"
+        },
+        {
+          "name": "exit_code_one",
+          "description": "exit code is 1"
+        },
+        {
+          "name": "state_iteration_unchanged",
+          "description": ".claude/code-review.local.md still has iteration: 3"
+        },
+        {
+          "name": "state_max_unchanged",
+          "description": ".claude/code-review.local.md still has max_iterations: 3"
+        },
+        {
+          "name": "no_copilot_invocation",
+          "description": "copilot.js is not spawned"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "name": "continue-loop-raises-cap-and-runs-reviewer",
+      "prompt": "Setup: git repo with a committed file + dirty working tree (so git stash create yields a snapshot). .claude/code-review.local.md with iteration:3, max_iterations:3, active:true, model:'gpt-5.4', mode:'claude', head_sha set to HEAD. Intercept copilot.js with a shim that prints 'SHIM-REVIEW\\nImportant: foo\\n'. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js --max-iterations 5.",
+      "expected_output": "Exit code 0. stdout contains the continue banner ('Code Review Loop continued', 'Iteration: 4', 'ROLE SEPARATION'), followed by the reviewer report including 'SHIM-REVIEW' and 'Important: foo'. State updates atomically: iteration becomes 4, max_iterations becomes 5, base_revision and head_sha are 40-hex SHAs. .claude/code-review.last-report.md contains the shim stdout. copilot.js is invoked exactly once with --model gpt-5.4 and a prompt that includes the range 'base..head' and 'REVIEW SCOPE — EXCLUSIONS'.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "banner_continued_line",
+          "description": "stdout contains 'Code Review Loop continued'"
+        },
+        {
+          "name": "banner_iteration_next",
+          "description": "stdout contains 'Iteration: 4'"
+        },
+        {
+          "name": "banner_role_separation",
+          "description": "stdout contains 'ROLE SEPARATION'"
+        },
+        {
+          "name": "reviewer_report_streamed",
+          "description": "stdout contains the reviewer shim output (e.g. 'SHIM-REVIEW', 'Important: foo')"
+        },
+        {
+          "name": "state_iteration_incremented",
+          "description": ".claude/code-review.local.md shows iteration: 4"
+        },
+        {
+          "name": "state_max_raised",
+          "description": ".claude/code-review.local.md shows max_iterations: 5"
+        },
+        {
+          "name": "state_head_and_base_sha",
+          "description": "base_revision and head_sha in state are 40-char hex SHAs"
+        },
+        {
+          "name": "report_persisted",
+          "description": ".claude/code-review.last-report.md contains the shim reviewer output"
+        },
+        {
+          "name": "copilot_invoked_with_model",
+          "description": "copilot.js was spawned once with '--model gpt-5.4'"
+        },
+        {
+          "name": "copilot_prompt_has_range",
+          "description": "the prompt passed to copilot.js contains a 'sha..sha' git range"
+        },
+        {
+          "name": "copilot_prompt_has_exclusion",
+          "description": "the prompt passed to copilot.js contains 'REVIEW SCOPE — EXCLUSIONS'"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "name": "continue-loop-rejects-without-new-diff",
+      "prompt": "Setup: git repo with a committed file, clean working tree, HEAD unchanged. .claude/code-review.local.md with iteration:3, max_iterations:3, head_sha = current HEAD. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js --max-iterations 5.",
+      "expected_output": "Exit code 1. stderr contains 'No new changes since iteration 3'. State file is COMPLETELY unchanged (iteration 3, max_iterations 3, head_sha unchanged). Copilot is NOT invoked.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_new_changes_message",
+          "description": "stderr contains 'No new changes since iteration 3'"
+        },
+        {
+          "name": "exit_code_one",
+          "description": "exit code is 1"
+        },
+        {
+          "name": "state_completely_unchanged",
+          "description": ".claude/code-review.local.md is byte-identical to the pre-run state (iteration 3, max_iterations 3, head_sha unchanged)"
+        },
+        {
+          "name": "no_copilot_invocation",
+          "description": "copilot.js is not spawned"
+        }
+      ]
+    }
+  ]
+}

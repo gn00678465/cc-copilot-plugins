@@ -1,0 +1,11 @@
+{
+    "name": "code-review-and-quality",
+    "version": "1.0.0",
+    "description": "Internal review plugin providing multi-axis review skills and master reviewer agent",
+    "author": {
+        "name": "gn00678465",
+        "email": "gn00678465@gmail.com"
+    },
+    "agents": "agents/",
+    "skills": ["skills/"]
+}
