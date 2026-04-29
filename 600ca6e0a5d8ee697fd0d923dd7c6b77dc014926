@@ -1,0 +1,31 @@
+發現過程：
+  在 worktree 端到端驗證 PR2（commit 8d673bc）時，sandbox 的「同 tree
+  不同 SHA → 預期 gate 觸發」測試一直失敗。追查發現 stderr 一直印
+  「ambiguous argument <sha>{tree}」— `^` 被 cmd 吞掉，gate 從未觸發。
+
+Windows 行為：
+  Node spawn / execFile 在 Windows 為了呼叫 .cmd / .bat shim（Git for
+  Windows 的 git.cmd 屬於這類）會走 cmd.exe，cmd 的逃逸字元是 `^`，
+  所以 `<sha>^{tree}` 經 cmd 解析後變成 `<sha>{tree}`。改用
+  `git show -s --format=%T <ref>` 完全規避 caret，行為等價。
+
+────────────────────────────────────────────────────────────────
+*** 重要 — 留下未解決議題 ***
+────────────────────────────────────────────────────────────────
+
+PR1/PR2 端到端驗證時觀察到 hasApprovalInReport 在實際 Copilot CLI
+輸出下會漏判 APPROVAL，導致 loop 無法自動結束、必須 /cancel-review。
+state 已被清掉沒能直接取證，根因尚未確認。
+
+完整 handoff 在本機 untracked 檔：
+  .artifacts/code-review-loop-approval-detection-handoff.md
+
+該文件涵蓋：
+  - 涉及檔案與函式（含 line 號）
+  - 既有設計約束（commit 4a6c618 的歷史脈絡，不能輕易放寬）
+  - 五個假說（A: ANSI 殘留、B: 不可見字元、C: token 後另起一行、
+    D: 孤立 \r、E: 同行前綴）
+  - 三階段建議（先加 CODE_REVIEW_DEBUG 取證、再視證據選修法、最後驗證）
+  - 不要做的事（避免直接改成 includes、避免在 reviewer 那層激進清洗）
+
+下次接手請先讀 handoff 再動手。
