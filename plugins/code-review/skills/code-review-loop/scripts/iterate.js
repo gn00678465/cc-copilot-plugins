@@ -50,6 +50,24 @@ function gitHeadCommit(cwd) {
   }
 }
 
+// Resolve the tree hash for a commit-ish. Used by computeNextRange to detect
+// stash-to-stash ranges where the working tree is byte-identical to the
+// previous iteration: `git stash create` always returns a fresh commit SHA
+// when there are pending changes relative to HEAD, even if those changes
+// haven't moved since the last call. Comparing tree hashes lets us catch
+// "no real change" cases that two distinct stash SHAs would otherwise hide.
+function gitTreeHash(ref, cwd) {
+  if (!ref) return '';
+  try {
+    return execSync(
+      `git rev-parse ${ref}^{tree}`,
+      { cwd, encoding: 'utf8' }
+    ).trim();
+  } catch (_) {
+    return '';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Workspace / path resolution
 // ---------------------------------------------------------------------------
@@ -176,6 +194,19 @@ function computeNextRange(state, workspaceRoot) {
 
   const snapshot = gitStashCreate(workspaceRoot);
   if (snapshot) {
+    // Guard against stash-to-stash empty diffs: when prevRef is itself a
+    // stash SHA from the previous iteration and the working tree hasn't
+    // moved since, prevRef and snapshot will share the same tree hash and
+    // `git diff prevRef..snapshot` would be empty. Drop down to no-diff so
+    // the caller can prompt the user to commit / fix instead of running a
+    // pointless reviewer pass.
+    if (prevRef) {
+      const prevTree = gitTreeHash(prevRef, workspaceRoot);
+      const newTree = gitTreeHash(snapshot, workspaceRoot);
+      if (prevTree && newTree && prevTree === newTree) {
+        return { base: null, head: null, reason: 'no-diff' };
+      }
+    }
     return { base: prevRef || gitHeadCommit(workspaceRoot), head: snapshot };
   }
 
@@ -262,6 +293,7 @@ module.exports = {
   hasApprovalInReport,
   gitStashCreate,
   gitHeadCommit,
+  gitTreeHash,
   resolveWorkspaceRoot,
   resolveStateFile,
   resolveReportFile,

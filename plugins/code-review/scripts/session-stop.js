@@ -195,9 +195,18 @@ async function main() {
   const range = computeNextRange(state, workspaceRoot);
   if (range.reason === 'no-diff') {
     process.stderr.write(
-      `⚠️  Code review loop: no changes detected since iteration ${iteration}. ` +
-      `Address the reviewer's findings before exiting, or run /cancel-review ` +
-      `to end the loop. State preserved.\n`
+      `⚠️  Code review loop: no new changes detected since iteration ${iteration}.\n` +
+      `\n` +
+      `   If you already made fixes but didn't commit them, the working tree\n` +
+      `   matches the previous iteration's snapshot — the reviewer can't see\n` +
+      `   them. Commit and exit again:\n` +
+      `       git add <changed files>\n` +
+      `       git commit -m "fix: <short description>"\n` +
+      `\n` +
+      `   If you haven't started fixing yet, address the reviewer's findings\n` +
+      `   first, then commit before exiting.\n` +
+      `\n` +
+      `   To discard this loop entirely, run /cancel-review. State preserved.\n`
     );
     return;
   }
