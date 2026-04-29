@@ -77,6 +77,40 @@ function buildExclusionClause() {
 }
 
 // ---------------------------------------------------------------------------
+// Default review scope — code only
+//
+// Hard rule: the reviewer must focus on code. Documentation, design notes,
+// READMEs, CHANGELOGs, ADRs, and similar non-code artifacts are out of scope
+// by default and must NOT generate findings. The user can override this on a
+// per-loop basis by stating in the activation prompt that documentation (or
+// a specific doc set) should be reviewed.
+//
+// Intentional non-enumeration: file extensions are not listed because the set
+// is open-ended (every language adds more) and any list is wrong tomorrow.
+// The reviewer judges semantically: "is this source code or text/prose?".
+// When in doubt, treat it as code (false positive on review is recoverable;
+// silent skip of real code is not).
+// ---------------------------------------------------------------------------
+function buildDefaultScopeClause() {
+    return (
+        '\n\nREVIEW SCOPE — DEFAULT (CODE ONLY)\n\n' +
+        'By default, this loop reviews CODE only. Treat documentation, design ' +
+        'notes, READMEs, CHANGELOGs, ADRs, marketing copy, and other prose / ' +
+        'text-only artifacts as OUT OF SCOPE: do NOT list findings against ' +
+        'them, do NOT let them affect your verdict, and do NOT block approval ' +
+        'on issues found only in such files.\n\n' +
+        'Judge semantically — "is this source code, configuration, or build ' +
+        'logic that affects program behavior, or is it human-facing prose?" ' +
+        'No file-extension allowlist is provided because the set of code file ' +
+        'types is open-ended. WHEN IN DOUBT, treat the file as code and review ' +
+        'it; missing real code is worse than a spurious finding.\n\n' +
+        'Override: if the writer\'s ORIGINAL ACTIVATION PROMPT explicitly asks ' +
+        'you to review documentation (or specific docs), then docs ARE in scope ' +
+        'for this loop. Absent such an explicit instruction, skip them.'
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Emotional stimuli near the iteration cap
 //
 // As the loop approaches its --max-iterations ceiling, the reviewer's verdict
@@ -168,6 +202,7 @@ module.exports = {
     APPROVAL_PROTOCOL_SUFFIX,
     wrapReviewerPrompt,
     buildExclusionClause,
+    buildDefaultScopeClause,
     buildLoopContextSuffix,
     runCopilot,
 };

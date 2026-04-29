@@ -235,13 +235,18 @@ function invokeReviewer({ workspaceRoot, model, prompt }) {
 // ---------------------------------------------------------------------------
 
 function composeIterationPrompt({ base, head, iteration, maxIterations }) {
-  const { buildExclusionClause, buildLoopContextSuffix } = require('./copilot.js');
+  const {
+    buildExclusionClause,
+    buildDefaultScopeClause,
+    buildLoopContextSuffix,
+  } = require('./copilot.js');
   return (
     `Review the incremental changes in this git range: \`${base}..${head}\`.\n\n` +
     `Run \`git diff ${base}..${head}\` to see exactly what changed ` +
     `since the previous review iteration. Apply the same multi-axis ` +
     `review (correctness / quality / security / performance) focused ` +
     `ONLY on these changes.` +
+    buildDefaultScopeClause() +
     buildExclusionClause() +
     buildLoopContextSuffix(iteration, maxIterations)
   );

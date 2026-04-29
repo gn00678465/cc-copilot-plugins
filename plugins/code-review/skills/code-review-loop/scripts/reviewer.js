@@ -157,6 +157,7 @@ function writeStateFile(opts) {
     'base_revision: null',
     'head_sha: null',
     `initial_head: ${initialHead ? `"${initialHead}"` : 'null'}`,
+    'session_id: null',
     '---',
     '',
     prompt,
@@ -259,12 +260,18 @@ function reportFilePath(mode) {
 function runCopilotScript(opts) {
   return new Promise((resolve, reject) => {
     const copilotScript = path.join(__dirname, 'copilot.js');
-    const { buildExclusionClause, buildLoopContextSuffix } = require(copilotScript);
-    // Iteration-1 reviewer prompt = user prompt + exclusion clause for our
-    // own state files + (conditionally) emotional-stimuli context when the
-    // requested max_iterations puts this first round near the cap.
+    const {
+      buildExclusionClause,
+      buildDefaultScopeClause,
+      buildLoopContextSuffix,
+    } = require(copilotScript);
+    // Iteration-1 reviewer prompt = user prompt + default code-only scope +
+    // exclusion clause for our own state files + (conditionally) emotional-
+    // stimuli context when the requested max_iterations puts this first
+    // round near the cap.
     const enrichedPrompt =
       opts.prompt +
+      buildDefaultScopeClause() +
       buildExclusionClause() +
       buildLoopContextSuffix(1, opts.maxIterations);
     const child = spawn(

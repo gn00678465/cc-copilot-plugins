@@ -46,13 +46,27 @@ Warning signs you are about to violate these rules:
 
 If a rule conflicts with a heuristic urge to be helpful, the rule wins.
 
+## Default review scope — code only
+
+By default this loop reviews **code only**. Documentation, design notes, READMEs, CHANGELOGs, ADRs, and similar prose / text-only artifacts are out of scope and the reviewer is instructed to skip them — they will not generate findings and will not block approval.
+
+This is intentional and not a list of file extensions: the reviewer judges semantically ("is this source code or human-facing prose?") and treats ambiguous cases as code (preferring a noisy review over a silent skip of real code).
+
+To opt documentation in for a specific loop, state it explicitly in your activation prompt — e.g. `/code-review-loop Review the API doc updates in docs/api.md alongside the code changes`. Without that explicit instruction, docs stay out of scope.
+
 ## Your role — writer / fixer only
 
 At each iteration you may only:
 
 1. **Read** the Copilot reviewer's report (arrives in your conversation; also on disk at `.<mode>/code-review.last-report.md`).
 2. **Fix** every issue the reviewer flagged as `Critical` or `Important`.
-3. **Exit your turn** — the stop hook then either detects the reviewer's `APPROVAL` in the persisted report and lets the session end, or re-invokes the reviewer on the new diff for another iteration.
+3. **Commit your fixes before exiting.** Stage and commit the changed files with a descriptive message:
+   ```bash
+   git add <changed files>
+   git commit -m "fix: <short description of the fix>"
+   ```
+   > ⚠️ Uncommitted changes are captured by `git stash create`, which can produce two stash commits with **identical trees** across iterations — the next reviewer run then sees an empty diff and cannot verify your fix. Always commit before exiting; the stop hook will diff `<old-HEAD>..<new-HEAD>` cleanly.
+4. **Exit your turn** — the stop hook then either detects the reviewer's `APPROVAL` in the persisted report and lets the session end, or re-invokes the reviewer on the new diff for another iteration.
 
 Anything else — exploring on your own initiative, running ad-hoc quality checks, refactoring unrelated code — is out of scope for this loop.
 

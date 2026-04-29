@@ -97,6 +97,66 @@ async function main() {
 
   if (!state.active) return;
 
+  // ---------------------------------------------------------------------
+  // Session isolation
+  //
+  // The state file is project-level and shared across every Claude Code
+  // session in the same workspace, but only ONE session is actually
+  // driving the loop (the one that ran /code-review-loop). When other
+  // sessions exit, their Stop event must not interfere with that loop.
+  //
+  // Binding strategy:
+  //   - state.session_id null  →  unbound; the FIRST Stop event with a
+  //                               session_id claims the loop. A clear
+  //                               stderr notice is emitted so the user
+  //                               can /cancel-review if the wrong
+  //                               session claimed it.
+  //   - state.session_id set   →  bound; only matching session_id may
+  //                               drive the loop. Mismatching sessions
+  //                               return silently (allow exit, do not
+  //                               re-invoke reviewer).
+  //
+  // Fail-closed when the hook input lacks session_id but state is bound:
+  // do NOT interfere — better to let an exit through than to drive a
+  // bound loop using anonymous events.
+  // ---------------------------------------------------------------------
+  const incomingSessionId = (typeof input.session_id === 'string' && input.session_id)
+    ? input.session_id
+    : null;
+
+  if (typeof state.session_id === 'string' && state.session_id) {
+    if (!incomingSessionId) {
+      // Bound, but this Stop event has no identity. Don't risk driving
+      // the loop on behalf of an unknown session.
+      return;
+    }
+    if (incomingSessionId !== state.session_id) {
+      // Foreign session exiting. Allow it to exit silently; do not
+      // touch the loop.
+      return;
+    }
+    // Matching session — fall through to the loop's normal flow.
+  } else if (incomingSessionId) {
+    // Unbound state + identifiable Stop event → claim the loop.
+    try {
+      saveState(stateFile, { ...state, session_id: incomingSessionId });
+      state = { ...state, session_id: incomingSessionId };
+      process.stderr.write(
+        `🔒 Code review loop bound to session ${incomingSessionId.slice(0, 8)}…\n` +
+        `   If this session is not the one driving the loop, run /cancel-review\n` +
+        `   and re-run /code-review-loop from the correct session.\n`
+      );
+    } catch (err) {
+      process.stderr.write(
+        `⚠️  Code review loop: failed to record session_id (${err.message}). ` +
+        `Continuing without binding; future Stop events from other sessions ` +
+        `may interfere.\n`
+      );
+    }
+  }
+  // else: unbound state + no incoming session_id → legacy fall-through;
+  // behavior matches pre-isolation versions (best-effort, no isolation).
+
   // Approval check — SOURCE OF TRUTH is the reviewer's persisted report, NOT
   // the writer's last message. The reviewer is the only party authorized to
   // emit the terminator token, so we inspect only its output. This prevents
