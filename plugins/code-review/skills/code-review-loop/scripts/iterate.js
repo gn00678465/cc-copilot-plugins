@@ -56,12 +56,21 @@ function gitHeadCommit(cwd) {
 // when there are pending changes relative to HEAD, even if those changes
 // haven't moved since the last call. Comparing tree hashes lets us catch
 // "no real change" cases that two distinct stash SHAs would otherwise hide.
+//
+// Implementation note: uses `git show -s --format=%T <ref>` rather than
+// `git rev-parse <ref>^{tree}` because the latter contains `^`, which
+// Windows cmd.exe interprets as an escape character. Even when invoked
+// via execFileSync, Node on Windows routes through cmd for .cmd shims
+// (e.g. git.cmd from Git for Windows), and the caret gets silently
+// stripped — turning `<sha>^{tree}` into `<sha>{tree}`, which fails as
+// an ambiguous-argument error and disables this gate entirely.
 function gitTreeHash(ref, cwd) {
   if (!ref) return '';
   try {
-    return execSync(
-      `git rev-parse ${ref}^{tree}`,
-      { cwd, encoding: 'utf8' }
+    return execFileSync(
+      'git',
+      ['show', '-s', '--format=%T', ref],
+      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
     ).trim();
   } catch (_) {
     return '';
