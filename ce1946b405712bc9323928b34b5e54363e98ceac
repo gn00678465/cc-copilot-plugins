@@ -1,0 +1,15 @@
+背景文件（本機 untracked）：
+  .artifacts/code-review-loop-bug-report.md  — 完整原始分析
+
+對應原始議題：
+  - P5 (Critical) — Stop Hook 無 Session 隔離（多 Session 互相干擾）
+  - P2 (High)     — SKILL.md 未要求 writer 在 exit 前 commit
+  - 新增硬性規則  — 預設只審 code，文件類除非 prompt 明確指定否則跳過
+
+驗證情境（E2E 通過）：
+  1. unbound state + 帶 session_id 的 Stop → 認領並寫入 state
+  2. bound match → 正常驅動 loop（首個 stop 後續 iter 都認得）
+  3. bound mismatch（外來 session）→ 靜默放行，不接管 loop
+  4. bound + 缺 input.session_id → fail-closed 靜默放行
+  5. 預設 scope clause 驗證 — 用 gpt-5-mini 跑真實 reviewer，confirmed
+     reviewer 回報「Files reviewed: a.js (README.md excluded per scope)」
