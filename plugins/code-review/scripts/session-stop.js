@@ -165,6 +165,23 @@ async function main() {
   //
   // APPROVAL is also the ONLY path that clears state — see module doc.
   const latestReport = readReportFile(reportFile);
+
+  // Diagnostic: when CODE_REVIEW_DEBUG is set, dump the tail of the report
+  // so a missed APPROVAL match can be debugged by inspecting bytes / escape
+  // characters that aren't visible in normal text output. Off by default;
+  // user opts in via `CODE_REVIEW_DEBUG=1` in the hook command or shell env.
+  if (process.env.CODE_REVIEW_DEBUG) {
+    const normalised = (latestReport || '').replace(/\r\n/g, '\n');
+    const tailLines = normalised.split('\n').slice(-4);
+    const tailBuf = Buffer.from(latestReport || '').slice(-128);
+    process.stderr.write(
+      `[debug] report bytes: ${Buffer.byteLength(latestReport || '')}\n` +
+      `[debug] last 4 lines (escaped): ${JSON.stringify(tailLines)}\n` +
+      `[debug] last 128 bytes hex: ${tailBuf.toString('hex')}\n` +
+      `[debug] hasApprovalInReport result: ${hasApprovalInReport(latestReport)}\n`
+    );
+  }
+
   if (hasApprovalInReport(latestReport)) {
     process.stdout.write(
       '✅ Code review loop: Reviewer issued APPROVAL in its latest report. ' +
