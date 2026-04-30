@@ -292,33 +292,14 @@ function invokeReviewer({ workspaceRoot, model, prompt }) {
 }
 
 // ---------------------------------------------------------------------------
-// Iteration-2+ reviewer prompt composition
+// Iteration-2+ reviewer prompt composition (re-exported from prompts.js)
 //
-// Assembled from three fragments:
-//   1. The range-focused review instruction (base..head).
-//   2. buildExclusionClause() — tells the reviewer to skip the plugin's own
-//      state files if they happen to be tracked in git.
-//   3. buildLoopContextSuffix() — injects emotional-stimuli context on the
-//      final 1–2 iterations to lift reviewer rigour.
+// The actual string assembly lives in prompts.js after the Phase A
+// consolidation. We re-export here so existing callers (session-stop.js,
+// continue.js) keep working without changing their import paths.
 // ---------------------------------------------------------------------------
 
-function composeIterationPrompt({ base, head, iteration, maxIterations }) {
-  const {
-    buildExclusionClause,
-    buildDefaultScopeClause,
-    buildLoopContextSuffix,
-  } = require('./copilot.js');
-  return (
-    `Review the incremental changes in this git range: \`${base}..${head}\`.\n\n` +
-    `Run \`git diff ${base}..${head}\` to see exactly what changed ` +
-    `since the previous review iteration. Apply the same multi-axis ` +
-    `review (correctness / quality / security / performance) focused ` +
-    `ONLY on these changes.` +
-    buildDefaultScopeClause() +
-    buildExclusionClause() +
-    buildLoopContextSuffix(iteration, maxIterations)
-  );
-}
+const { composeIterationPrompt } = require('./prompts.js');
 
 // ---------------------------------------------------------------------------
 // Exports

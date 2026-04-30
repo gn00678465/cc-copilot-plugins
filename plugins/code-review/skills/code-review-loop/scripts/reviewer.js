@@ -274,20 +274,18 @@ function reportFilePath(mode) {
 function runCopilotScript(opts) {
   return new Promise((resolve, reject) => {
     const copilotScript = path.join(__dirname, 'copilot.js');
-    const {
-      buildExclusionClause,
-      buildDefaultScopeClause,
-      buildLoopContextSuffix,
-    } = require(copilotScript);
+    const { composeInitialReviewerPrompt } = require(
+      path.join(__dirname, 'prompts.js')
+    );
     // Iteration-1 reviewer prompt = user prompt + default code-only scope +
     // exclusion clause for our own state files + (conditionally) emotional-
     // stimuli context when the requested max_iterations puts this first
-    // round near the cap.
-    const enrichedPrompt =
-      opts.prompt +
-      buildDefaultScopeClause() +
-      buildExclusionClause() +
-      buildLoopContextSuffix(1, opts.maxIterations);
+    // round near the cap. The APPROVAL_PROTOCOL_SUFFIX is appended later by
+    // copilot.js's wrapReviewerPrompt at spawn time.
+    const enrichedPrompt = composeInitialReviewerPrompt({
+      userPrompt: opts.prompt,
+      maxIterations: opts.maxIterations,
+    });
     const child = spawn(
       process.execPath,
       [copilotScript, '--prompt', enrichedPrompt, '--model', opts.model],

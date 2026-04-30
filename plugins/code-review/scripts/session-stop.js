@@ -54,6 +54,10 @@ const {
   path.resolve(__dirname, '..', 'skills', 'code-review-loop', 'scripts', 'iterate.js')
 );
 
+const { buildIterationReason } = require(
+  path.resolve(__dirname, '..', 'skills', 'code-review-loop', 'scripts', 'prompts.js')
+);
+
 // ---------------------------------------------------------------------------
 // Hook input
 // ---------------------------------------------------------------------------
@@ -280,35 +284,12 @@ async function main() {
     clearReportFile(reportFile);
   }
 
-  const reason = reviewerReport
-    ? [
-        `The Copilot reviewer produced the following report for git range \`${newBase}..${newHead}\`.`,
-        `You are the writer/fixer — DO NOT conduct your own review; act only on this report.`,
-        '',
-        '---',
-        reviewerReport,
-        '---',
-        '',
-        'Your job now:',
-        '  1. Fix every Critical and Important finding above.',
-        '  2. DO NOT emit `<promise>APPROVAL</promise>` yourself — that token',
-        '     is reserved for the reviewer. The stop hook inspects the',
-        '     persisted reviewer report, not your messages.',
-        '  3. When done, exit your turn; the stop hook will either detect',
-        '     the reviewer\'s APPROVAL on its next check or re-invoke the',
-        '     reviewer on the new diff for another iteration.',
-      ].join('\n')
-    : [
-        `The Copilot reviewer could not be invoked for git range \`${newBase}..${newHead}\`.`,
-        'Do NOT review the diff yourself. Do NOT emit the approval token.',
-        'Re-invoke the reviewer by running:',
-        '',
-        `  node \${CLAUDE_PLUGIN_ROOT}/skills/code-review-loop/scripts/copilot.js \\`,
-        `    --prompt "Review incremental changes in git range ${newBase}..${newHead}" \\`,
-        `    --model ${reviewerModel}`,
-        '',
-        'Then fix what that report flags. Only the reviewer can terminate the loop.',
-      ].join('\n');
+  const reason = buildIterationReason({
+    base: newBase,
+    head: newHead,
+    reviewerReport,
+    reviewerModel,
+  });
 
   process.stdout.write(
     JSON.stringify({
