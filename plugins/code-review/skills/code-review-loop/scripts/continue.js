@@ -111,6 +111,55 @@ function loadActiveState(workspaceRoot) {
   return null;
 }
 
+// Sidecar protocol: the UserPromptExpansion hook (bind-session.js) writes
+// the invoking session's id to .claude/code-review.pending-session.txt
+// before this script runs. We consume it once and use it to enforce the
+// "only the binding session may drive the loop" contract:
+//   - state bound + sidecar match  → proceed (silent)
+//   - state bound + sidecar mismatch → REFUSE with clear instructions
+//   - state bound + no sidecar     → REFUSE (fail-closed; cannot verify)
+//   - state unbound + sidecar set  → claim (write session_id into state)
+//   - both null                    → legacy fall-through (proceed)
+function checkAndClaimSession({ state, stateFile, workspaceRoot }) {
+  const incomingSessionId = iterate.consumePendingSessionId(workspaceRoot);
+  const stateSessionId = (typeof state.session_id === 'string' && state.session_id)
+    ? state.session_id
+    : null;
+
+  if (stateSessionId && incomingSessionId) {
+    if (stateSessionId !== incomingSessionId) {
+      exitWithError(
+        `Session mismatch — the loop is bound to session ` +
+        `${stateSessionId.slice(0, 8)}…, but /continue-loop was invoked from ` +
+        `session ${incomingSessionId.slice(0, 8)}…. ` +
+        `Run /continue-loop from the original session, or run /cancel-review ` +
+        `here to discard the bound loop and start a new one with /code-review-loop.`
+      );
+    }
+    return state;
+  }
+  if (stateSessionId && !incomingSessionId) {
+    exitWithError(
+      `Session binding cannot be verified — the UserPromptExpansion hook did ` +
+      `not deliver a session_id (Claude Code may be out of date, or the hook ` +
+      `is mis-configured). The loop is bound to session ` +
+      `${stateSessionId.slice(0, 8)}…. To force-rebind to the current session, ` +
+      `run /cancel-review and then /code-review-loop again.`
+    );
+  }
+  if (!stateSessionId && incomingSessionId) {
+    const newState = { ...state, session_id: incomingSessionId };
+    iterate.saveState(stateFile, newState);
+    process.stderr.write(
+      `🔒 Code review loop bound to session ${incomingSessionId.slice(0, 8)}…\n`
+    );
+    return newState;
+  }
+  // Both null: legacy fall-through — Claude Code without UserPromptExpansion
+  // and a state file written before session binding existed.
+  return state;
+}
+
 function validateResumePreconditions(state, flags) {
   if (state.active !== true) {
     exitWithError(`Code review loop is not active (state.active != true).`);
@@ -188,7 +237,16 @@ function main() {
     exitWithError('No active code review loop found. Run /code-review-loop to start one.');
   }
 
-  const { state, stateFile, dotDir, mode } = found;
+  const { state: rawState, stateFile, dotDir, mode } = found;
+
+  // Enforce session binding before doing anything that might mutate state
+  // or run the reviewer. Mismatches exit early with a clear message.
+  const state = checkAndClaimSession({
+    state: rawState,
+    stateFile,
+    workspaceRoot,
+  });
+
   const { iteration, effectiveMax } = validateResumePreconditions(state, flags);
 
   const range = iterate.computeNextRange(state, workspaceRoot);

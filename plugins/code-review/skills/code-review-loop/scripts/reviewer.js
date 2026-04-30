@@ -137,6 +137,19 @@ function findProjectRoot() {
   }
 }
 
+// Sidecar protocol: the UserPromptExpansion hook (bind-session.js) writes
+// the activating session's id to .claude/code-review.pending-session.txt
+// before this script runs. The shared helper consumePendingSessionId in
+// iterate.js reads it once and deletes it — that way the loop's
+// session_id is bound at activation time, eliminating the
+// claim-on-first-stop race window where an unrelated session's Stop
+// event could otherwise mis-claim the loop. When the sidecar is absent
+// (e.g. hook didn't fire because Claude Code is too old), fall back to
+// session_id: null and the legacy claim path.
+const { consumePendingSessionId } = require(
+  path.resolve(__dirname, 'iterate.js')
+);
+
 function writeStateFile(opts) {
   const { maxIterations, mode, prompt, model } = opts;
   const root = findProjectRoot();
@@ -145,6 +158,7 @@ function writeStateFile(opts) {
 
   const startedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   const initialHead = getInitialHead();
+  const sessionId = consumePendingSessionId(root);
   const frontmatter = [
     '---',
     'active: true',
@@ -157,7 +171,7 @@ function writeStateFile(opts) {
     'base_revision: null',
     'head_sha: null',
     `initial_head: ${initialHead ? `"${initialHead}"` : 'null'}`,
-    'session_id: null',
+    `session_id: ${sessionId ? `"${sessionId}"` : 'null'}`,
     '---',
     '',
     prompt,

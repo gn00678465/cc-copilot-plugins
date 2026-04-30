@@ -94,6 +94,34 @@ function resolveReportFile(workspaceRoot, dotDir) {
 }
 
 // ---------------------------------------------------------------------------
+// Pending-session sidecar
+//
+// The UserPromptExpansion hook (bind-session.js) writes the activating
+// session's id to .claude/code-review.pending-session.txt before the
+// slash command body runs. The body (reviewer.js / continue.js) reads
+// the sidecar exactly once via consumePendingSessionId, then deletes
+// it. Path is fixed under .claude/ regardless of --mode because mode
+// is only known after argument parsing inside the body.
+// ---------------------------------------------------------------------------
+
+const PENDING_SESSION_REL = path.join('.claude', 'code-review.pending-session.txt');
+
+function resolvePendingSessionFile(workspaceRoot) {
+  return path.join(workspaceRoot, PENDING_SESSION_REL);
+}
+
+function consumePendingSessionId(workspaceRoot) {
+  const sidecarPath = resolvePendingSessionFile(workspaceRoot);
+  try {
+    const raw = fs.readFileSync(sidecarPath, 'utf8').trim();
+    fs.unlinkSync(sidecarPath);
+    return raw || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Report file I/O
 // ---------------------------------------------------------------------------
 
@@ -306,6 +334,8 @@ module.exports = {
   resolveWorkspaceRoot,
   resolveStateFile,
   resolveReportFile,
+  resolvePendingSessionFile,
+  consumePendingSessionId,
   readReportFile,
   writeReportFile,
   clearReportFile,
