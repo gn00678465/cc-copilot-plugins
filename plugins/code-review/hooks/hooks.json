@@ -1,5 +1,5 @@
 {
-  "description": "Code review plugin stop hook for automated review-fix loops",
+  "description": "Code review plugin: Stop hook for review-fix loops + UserPromptExpansion hook to bind activating session_id at slash-command time",
   "hooks": {
     "Stop": [
       {
@@ -7,6 +7,16 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/session-stop.js claude"
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/skills/code-review-loop/scripts/bind-session.js"
           }
         ]
       }

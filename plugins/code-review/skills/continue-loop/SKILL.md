@@ -2,12 +2,6 @@
 name: continue-loop
 description: Continue a code review loop by resuming a suspended review, rerunning the reviewer on new changes, or raising the iteration cap with --max-iterations N. Use when asked to continue the review loop, resume a suspended review, rerun the reviewer after fixes, or raise the max-iterations limit.
 argument-hint: "[--max-iterations N]"
-hooks:
-  UserPromptExpansion:
-    - matcher: "continue-loop"
-      hooks:
-        - type: command
-          command: "node ${CLAUDE_PLUGIN_ROOT}/skills/code-review-loop/scripts/bind-session.js"
 ---
 
 # Continue Loop

@@ -2,12 +2,6 @@
 name: code-review-loop
 description: Orchestrates a separate Copilot CLI reviewer in an automated review-fix loop so the author is never the reviewer. Use before merging any change, or when code written by yourself, another agent, or a human needs an independent review. Your role inside this loop is strictly writer-fixer — you MUST NOT conduct the review yourself and you MUST NOT emit the approval token; only the external reviewer can end the loop.
 argument-hint: "PROMPT [--max-iterations N] [--model MODEL_NAME] [--mode claude|copilot]"
-hooks:
-  UserPromptExpansion:
-    - matcher: "code-review-loop"
-      hooks:
-        - type: command
-          command: "node ${CLAUDE_PLUGIN_ROOT}/skills/code-review-loop/scripts/bind-session.js"
 ---
 
 # Code Review Loop

@@ -138,7 +138,7 @@ session_id: null
 Review the staged changes for quality
 ```
 
-`session_id` is `null` until the first Stop event with a `session_id` claims the loop; afterwards only that session can drive the loop forward (other sessions' Stop events are silently ignored). See *Diagnostics* below to debug a session-mismatch case.
+`session_id` is bound at activation by the `UserPromptExpansion` hook (`bind-session.js`): when you type `/code-review-loop` or `/continue-loop`, the hook captures the session id and writes it to `.claude/code-review.pending-session.txt`; the slash command body consumes that sidecar and writes the value into state. If the hook didn't fire (older Claude Code, or hook not yet registered), `session_id` stays `null` and the plugin falls back to claim-on-first-stop — the first Stop event with a `session_id` then claims the loop. After binding, only the bound session may drive the loop forward; other sessions' Stop events are silently ignored. See *Diagnostics* below to verify or debug.
 
 ## Monitoring
 
@@ -208,6 +208,21 @@ When set, the next Stop event prints to stderr:
 | any printable on a new line after `0a` | reviewer added a footer line after the token | ❌ |
 
 The default off behavior is preserved when `CODE_REVIEW_DEBUG` is unset.
+
+### `CODE_REVIEW_DEBUG` — debug session-binding hook
+
+If `.claude\code-review.local.md`'s `session_id` stays `null` after you start a loop (which leaves you on the legacy claim-on-first-stop path instead of activation-time binding), check whether the `UserPromptExpansion` hook is firing.
+
+With `CODE_REVIEW_DEBUG=1`, `bind-session.js` appends a trace line to `.claude\code-review.bind-session.log` on every invocation. Each line records `expansion_type`, `command_name`, whether the host supplied `session_id`, and whether a sidecar was written:
+
+```text
+[2026-04-30T01:27:21.456Z] fire expansion_type=slash_command command_name=code-review-loop has_session=true
+[2026-04-30T01:27:21.464Z] wrote sidecar session_id=<id>
+```
+
+If the file is missing entirely after `/code-review-loop`, the hook isn't being registered — typically that means the plugin needs a reload (`/plugin reload code-review` or restart Claude Code) so it picks up the updated `hooks/hooks.json`.
+
+If the file shows a `fire` line but `has_session=false`, the host did not supply a session id in the hook input; the loop will fall back to claim-on-first-stop. If you see `command_name=` with an unexpected value, the host's command-naming convention doesn't match `code-review-loop` / `continue-loop`; report the value so the matcher can be widened.
 
 ## Roadmap
 
