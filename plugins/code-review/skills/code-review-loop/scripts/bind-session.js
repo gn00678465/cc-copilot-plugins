@@ -50,7 +50,23 @@ const DEBUG_LOG_REL = path.join('.claude', 'code-review.bind-session.log');
 
 // Slash commands that should claim the loop. Anything else is a no-op so
 // the same plugin-level hook can be registered without a matcher.
-const TARGETED_COMMANDS = new Set(['code-review-loop', 'continue-loop']);
+//
+// Claude Code may present `command_name` either as the bare skill name
+// (e.g. `code-review-loop`) or with this plugin's prefix attached
+// (e.g. `code-review:code-review-loop`), depending on host version.
+// Both forms are allowed; arbitrary `<other-plugin>:code-review-loop`
+// is intentionally NOT allowed so we don't write a stale sidecar when
+// another plugin happens to register a skill of the same name.
+const TARGETED_COMMANDS = new Set([
+  'code-review-loop',
+  'code-review:code-review-loop',
+  'continue-loop',
+  'code-review:continue-loop',
+]);
+
+function isTargetedCommand(commandName) {
+  return typeof commandName === 'string' && TARGETED_COMMANDS.has(commandName);
+}
 
 function readHookInput() {
   try {
@@ -96,7 +112,7 @@ function main() {
     `has_session=${!!sessionId}`
   );
 
-  if (!TARGETED_COMMANDS.has(commandName)) {
+  if (!isTargetedCommand(commandName)) {
     // Not our slash command. Stay out of the way.
     process.exit(0);
   }
