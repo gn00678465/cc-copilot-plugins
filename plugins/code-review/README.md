@@ -132,10 +132,13 @@ mode: "claude"
 base_revision: "20a94c9902b594ae982cc58744478a61a5a378af"
 head_sha: "ea21647a2a1d2e1a2dbcac48753b17373b6f3b2c"
 initial_head: "20a94c9902b594ae982cc58744478a61a5a378af"
+session_id: null
 ---
 
 Review the staged changes for quality
 ```
+
+`session_id` is `null` until the first Stop event with a `session_id` claims the loop; afterwards only that session can drive the loop forward (other sessions' Stop events are silently ignored). See *Diagnostics* below to debug a session-mismatch case.
 
 ## Monitoring
 
@@ -164,6 +167,47 @@ If you want to run the loop against `.copilot\`, you must also wire the matching
 ```text
 node ${CLAUDE_PLUGIN_ROOT}/scripts/session-stop.js copilot
 ```
+
+## Diagnostics
+
+### `CODE_REVIEW_DEBUG` — debug missed APPROVAL detection
+
+The Stop hook decides whether to terminate the loop by matching the **exact** terminator token on the final non-empty line of `.<mode>\code-review.last-report.md`. If the reviewer's report contains the token but the loop fails to terminate (forcing you to run `/cancel-review`), set `CODE_REVIEW_DEBUG=1` to dump the report tail before the match.
+
+**Enable for one session:**
+
+```powershell
+$env:CODE_REVIEW_DEBUG = "1"
+claude
+```
+
+```bash
+CODE_REVIEW_DEBUG=1 claude
+```
+
+**Or persist via your shell profile** (`~/.bashrc`, `$PROFILE`, etc.) when actively investigating.
+
+When set, the next Stop event prints to stderr:
+
+```text
+[debug] report bytes: <N>
+[debug] last 4 lines (escaped): [...JSON-stringified array...]
+[debug] last 128 bytes hex: <hex dump>
+[debug] hasApprovalInReport result: true|false
+```
+
+`hasApprovalInReport result: false` while the hex tail clearly contains `<promise>APPROVAL</promise>` indicates a known-failure variant in the strict matcher. Compare the bytes immediately after `</promise>` (`3c2f70726f6d6973653e`) against:
+
+| Trailing bytes | Meaning | Match? |
+|----------------|---------|--------|
+| *(nothing)* / `0a` / `0d 0a` | clean / `\n` / `\r\n` | ✅ |
+| `0d` alone | lone `\r` (rare) | ❌ |
+| `20` / `09` | space / tab | ❌ (intentional — see commit `4a6c618`) |
+| `1b 5b ...` | ANSI escape sequence | ❌ |
+| `e2 80 8b` / `ef bb bf` | zero-width space / BOM | ❌ |
+| any printable on a new line after `0a` | reviewer added a footer line after the token | ❌ |
+
+The default off behavior is preserved when `CODE_REVIEW_DEBUG` is unset.
 
 ## Roadmap
 
