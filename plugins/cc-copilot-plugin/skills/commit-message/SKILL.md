@@ -1,6 +1,6 @@
 ---
 name: commit-message
-description: 分析 git staged changes 並根據 Conventional Commits (1.0.0-beta.4) 規範自動生成繁體中文 commit message 與建議的分支名稱。使用時機包括：(1) 需要為已暫存 (staged) 的變更生成符合規範的提交訊息、(2) 需要根據變更內容建議一個有意義的分支名稱、(3) 確保提交包含正確的類型 (type) 與範圍 (scope)、(4) 在主分支 (main/master) 工作時需要自動化分支建議。適用於包含「幫我寫 commit message」、「產生 commit」、「建立 branch」、「取個分支名」、「提交變更」等請求的情境。會根據變更量與風險自動選擇簡單或詳細的提交模式。
+description: 分析 git staged changes 並根據 Conventional Commits (1.0.0-beta.4) 規範自動生成繁體中文 commit message 與建議的分支名稱。使用時機包括：(1) 需要為已暫存 (staged) 的變更生成符合規範的提交訊息、(2) 需要根據變更內容建議一個有意義的分支名稱、(3) 確保提交包含正確的類型 (type) 與範圍 (scope)、(4) 在主分支 (main/master) 工作時需要自動化分支建議。適用於包含「commit this」、「create a commit」、「make a commit」、「write a commit message」、「save my changes」、「commit staged changes」、「幫我寫 commit message」、「產生 commit」、「建立 branch」、「取個分支名」、「提交變更」等請求的情境。會根據變更量與風險自動選擇簡單或詳細的提交模式。
 ---
 
 # 慣例式提交與分支助手
@@ -179,7 +179,28 @@ python <skill-dir>/scripts/analyze_git.py
    | 混合多種狀態，涉及功能新增 | `feat`（並考慮拆分） |
 
 2. 結合 `git diff` 內容確認描述的精確性。
-3. **將完整的 Commit Message 覆寫至 `.git/COMMIT_EDITMSG`**（使用檔案寫入工具）。
+3. **將完整的 Commit Message 覆寫至 `.git/COMMIT_EDITMSG`**：
+   - ⚠️ **不要使用 Claude Code 的 `Write` 工具**。`.git/COMMIT_EDITMSG` 在任何一次 commit 之後就已經存在，`Write` 會以 `File has not been read yet. Read it first before writing to it.` 失敗。
+   - 改用 shell 直接覆寫，分平台選擇：
+     - **POSIX shell (bash/zsh)**：
+       ```bash
+       cat > .git/COMMIT_EDITMSG <<'EOF'
+       <type>(<scope>): <subject>
+
+       - bullet 1
+       - bullet 2
+       EOF
+       ```
+     - **Windows PowerShell**（注意：閉合的 `'@` 必須在第 0 欄，不能有縮排）：
+       ```powershell
+       @'
+       <type>(<scope>): <subject>
+
+       - bullet 1
+       - bullet 2
+       '@ | Set-Content -Encoding utf8 .git/COMMIT_EDITMSG
+       ```
+   - 若 harness 不支援 heredoc，才退回「先 `Read` `.git/COMMIT_EDITMSG` 再 `Write`」的兩步流程。
 4. 輸出對應的 `git commit` 指令：
    ```bash
    git commit -F .git/COMMIT_EDITMSG
