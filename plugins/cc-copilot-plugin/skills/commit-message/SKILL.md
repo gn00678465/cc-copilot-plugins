@@ -181,7 +181,16 @@ python <skill-dir>/scripts/analyze_git.py
 2. 結合 `git diff` 內容確認描述的精確性。
 3. **將完整的 Commit Message 覆寫至 `.git/COMMIT_EDITMSG`**：
    - ⚠️ **不要使用 Claude Code 的 `Write` 工具**。`.git/COMMIT_EDITMSG` 在任何一次 commit 之後就已經存在，`Write` 會以 `File has not been read yet. Read it first before writing to it.` 失敗。
-   - 改用 shell 直接覆寫，分平台選擇：
+   - ⚠️ **下方兩種語法不可互換**。動手前先確認你的**執行通道**，選對應語法：
+
+     | 執行通道 | 用哪段範例 | 判斷依據 |
+     |---------|-----------|---------|
+     | Claude Code `Bash` 工具 | **POSIX shell** | 即使在 Windows，此工具預設路由到 git-bash (`/usr/bin/bash`)。**不要**用 PowerShell 語法 |
+     | Claude Code `PowerShell` 工具 | **Windows PowerShell** | 明確要呼叫 pwsh 的場景 |
+     | 終端機 / 一般 shell | 看當前 shell：bash/zsh/sh → POSIX；pwsh → PowerShell | 用 `echo $SHELL`（POSIX）或 `$PSVersionTable`（PowerShell）確認 |
+
+     誤把 PowerShell 的 `@'...'@`、`Set-Content` 丟給 bash 會得到 `@: No such file or directory`、`Set-Content: command not found`；反之 bash 的 `<<'EOF'` 丟給 PowerShell 會被當成重新導向解析失敗。
+   - 確認通道後改用 shell 直接覆寫：
      - **POSIX shell (bash/zsh)**：
        ```bash
        cat > .git/COMMIT_EDITMSG <<'EOF'
