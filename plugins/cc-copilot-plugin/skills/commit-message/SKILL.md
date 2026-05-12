@@ -181,15 +181,21 @@ python <skill-dir>/scripts/analyze_git.py
 2. 結合 `git diff` 內容確認描述的精確性。
 3. **將完整的 Commit Message 覆寫至 `.git/COMMIT_EDITMSG`**：
    - ⚠️ **不要使用 Claude Code 的 `Write` 工具**。`.git/COMMIT_EDITMSG` 在任何一次 commit 之後就已經存在，`Write` 會以 `File has not been read yet. Read it first before writing to it.` 失敗。
-   - ⚠️ **下方兩種語法不可互換**。動手前先確認你的**執行通道**，選對應語法：
+   - ⚠️ **下方語法不可互換**。動手前先確認你的**執行通道**，選對應語法：
 
      | 執行通道 | 用哪段範例 | 判斷依據 |
      |---------|-----------|---------|
-     | Claude Code `Bash` 工具 | **POSIX shell** | 即使在 Windows，此工具預設路由到 git-bash (`/usr/bin/bash`)。**不要**用 PowerShell 語法 |
-     | Claude Code `PowerShell` 工具 | **Windows PowerShell** | 明確要呼叫 pwsh 的場景 |
-     | 終端機 / 一般 shell | 看當前 shell：bash/zsh/sh → POSIX；pwsh → PowerShell | 用 `echo $SHELL`（POSIX）或 `$PSVersionTable`（PowerShell）確認 |
+     | Claude Code `Bash` 工具 | **POSIX shell** | 即使在 Windows 也是 git-bash (`/usr/bin/bash`)。**不要**用 PowerShell 語法 |
+     | Claude Code `PowerShell` 工具 | **PowerShell Core (`pwsh`, 6+)** | Claude Code 內建呼叫 `pwsh`（目前通常 7+），**不是** Windows 5.1 內建的 `powershell.exe` |
+     | 終端機：bash / zsh / sh | POSIX | `echo $SHELL` |
+     | 終端機：PowerShell | `$PSVersionTable.PSEdition` 判斷：`Core` → pwsh 範例、`Desktop` → 5.1 fallback | `$PSVersionTable.PSEdition` |
+     | 其他 agent harness（Codex / Aider / 自訂） | 視該 harness 的 shell 而定，預設先試 POSIX；報 `Set-Content not found` 再切 PowerShell | 看 harness 文件或執行時觀察錯誤 |
+     | `cmd.exe` | 本節範例皆不適用 | 切到 bash 或 pwsh |
 
-     誤把 PowerShell 的 `@'...'@`、`Set-Content` 丟給 bash 會得到 `@: No such file or directory`、`Set-Content: command not found`；反之 bash 的 `<<'EOF'` 丟給 PowerShell 會被當成重新導向解析失敗。
+     **常見誤用對照**：
+     - PowerShell 的 `@'...'@`、`Set-Content` 丟給 bash → `@: No such file or directory`、`Set-Content: command not found`
+     - bash 的 `<<'EOF'` 丟給 PowerShell → 被當成重新導向解析失敗
+     - ⚠️ **不要用 PowerShell 的 `>` / `>>`**：5.1 的 `>` 走 `Out-File` 預設 UTF-16LE，會直接污染 commit 檔案
    - 確認通道後改用 shell 直接覆寫：
      - **POSIX shell (bash/zsh)**：
        ```bash
@@ -200,16 +206,31 @@ python <skill-dir>/scripts/analyze_git.py
        - bullet 2
        EOF
        ```
-     - **Windows PowerShell**（注意：閉合的 `'@` 必須在第 0 欄，不能有縮排）：
+     - **PowerShell Core (`pwsh`, 6+)**：
+       > ⚠️ 閉合的 `'@` **必須在第 0 欄，不能有縮排**，否則 here-string 解析失敗。
+
        ```powershell
        @'
        <type>(<scope>): <subject>
 
        - bullet 1
        - bullet 2
-       '@ | Set-Content -Encoding utf8 .git/COMMIT_EDITMSG
+       '@ | Set-Content -Encoding utf8NoBOM .git/COMMIT_EDITMSG
        ```
-   - 若 harness 不支援 heredoc，才退回「先 `Read` `.git/COMMIT_EDITMSG` 再 `Write`」的兩步流程。
+
+       必須用 `utf8NoBOM`（pwsh 6+ 才有此選項）。`Set-Content -Encoding utf8` 在 **Windows PowerShell 5.1** 會寫入 UTF-8 BOM (`EF BB BF`)，git 會把 BOM 當成 subject 首字元，破壞 commit 訊息。
+     - **Windows PowerShell 5.1 fallback**：改用 .NET API 寫出無 BOM，並以 `git rev-parse --absolute-git-dir` 取得絕對路徑（支援 worktree 與子目錄；同時避免 .NET 與 PS 的 cwd 不同步）：
+       ```powershell
+       $msg = @'
+       <type>(<scope>): <subject>
+
+       - bullet 1
+       - bullet 2
+       '@
+       $path = Join-Path (git rev-parse --absolute-git-dir) 'COMMIT_EDITMSG'
+       [System.IO.File]::WriteAllText($path, $msg, [System.Text.UTF8Encoding]::new($false))
+       ```
+   - 若上述寫法在你的執行環境都不可用（例如受限 shell 或沒有檔案系統存取的沙箱），才退回「先 `Read` `.git/COMMIT_EDITMSG` 再 `Write`」的兩步流程。
 4. 輸出對應的 `git commit` 指令：
    ```bash
    git commit -F .git/COMMIT_EDITMSG
