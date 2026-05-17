@@ -113,51 +113,44 @@ function loadActiveState(workspaceRoot) {
 
 // Sidecar protocol: the UserPromptExpansion hook (bind-session.js) writes
 // the invoking session's id to .claude/code-review.pending-session.txt
-// before this script runs. We consume it once and use it to enforce the
-// "only the binding session may drive the loop" contract:
-//   - state bound + sidecar match  → proceed (silent)
-//   - state bound + sidecar mismatch → REFUSE with clear instructions
-//   - state bound + no sidecar     → REFUSE (fail-closed; cannot verify)
-//   - state unbound + sidecar set  → claim (write session_id into state)
-//   - both null                    → legacy fall-through (proceed)
-function checkAndClaimSession({ state, stateFile, workspaceRoot }) {
+// before this script runs. We mirror reviewer.js's handling — consume,
+// write into state (or leave alone), proceed. We deliberately do NOT
+// verify mismatch or fail on missing delivery:
+//
+//   The point of session_id binding is to protect against Stop-hook
+//   race in multi-session workspaces (session B's Stop hook firing
+//   against session A's loop). That enforcement lives in
+//   session-stop.js, which receives session_id reliably and matches it
+//   against state. continue.js is a synchronous user-typed action; its
+//   job is to advance state and refresh the binding to "the most
+//   recently active session", not to second-guess the user.
+//
+//   - sidecar present, matches state    → silent, refresh nothing
+//   - sidecar present, differs from state → rebind (new owner) + notice
+//   - sidecar present, state unbound    → claim + notice
+//   - sidecar absent                    → leave state.session_id as-is,
+//                                         proceed silently (the Stop
+//                                         hook will still enforce the
+//                                         existing binding on subsequent
+//                                         events)
+function refreshSessionBinding({ state, stateFile, workspaceRoot }) {
   const incomingSessionId = iterate.consumePendingSessionId(workspaceRoot);
+  if (!incomingSessionId) {
+    return state;
+  }
   const stateSessionId = (typeof state.session_id === 'string' && state.session_id)
     ? state.session_id
     : null;
-
-  if (stateSessionId && incomingSessionId) {
-    if (stateSessionId !== incomingSessionId) {
-      exitWithError(
-        `Session mismatch — the loop is bound to session ` +
-        `${stateSessionId.slice(0, 8)}…, but /continue-loop was invoked from ` +
-        `session ${incomingSessionId.slice(0, 8)}…. ` +
-        `Run /continue-loop from the original session, or run /cancel-review ` +
-        `here to discard the bound loop and start a new one with /code-review-loop.`
-      );
-    }
+  if (stateSessionId === incomingSessionId) {
     return state;
   }
-  if (stateSessionId && !incomingSessionId) {
-    exitWithError(
-      `Session binding cannot be verified — the UserPromptExpansion hook did ` +
-      `not deliver a session_id (Claude Code may be out of date, or the hook ` +
-      `is mis-configured). The loop is bound to session ` +
-      `${stateSessionId.slice(0, 8)}…. To force-rebind to the current session, ` +
-      `run /cancel-review and then /code-review-loop again.`
-    );
-  }
-  if (!stateSessionId && incomingSessionId) {
-    const newState = { ...state, session_id: incomingSessionId };
-    iterate.saveState(stateFile, newState);
-    process.stderr.write(
-      `🔒 Code review loop bound to session ${incomingSessionId.slice(0, 8)}…\n`
-    );
-    return newState;
-  }
-  // Both null: legacy fall-through — Claude Code without UserPromptExpansion
-  // and a state file written before session binding existed.
-  return state;
+  const newState = { ...state, session_id: incomingSessionId };
+  iterate.saveState(stateFile, newState);
+  const action = stateSessionId ? 'rebound to' : 'bound to';
+  process.stderr.write(
+    `🔒 Code review loop ${action} session ${incomingSessionId.slice(0, 8)}…\n`
+  );
+  return newState;
 }
 
 function validateResumePreconditions(state, flags) {
@@ -239,9 +232,12 @@ function main() {
 
   const { state: rawState, stateFile, dotDir, mode } = found;
 
-  // Enforce session binding before doing anything that might mutate state
-  // or run the reviewer. Mismatches exit early with a clear message.
-  const state = checkAndClaimSession({
+  // Refresh state.session_id from the UserPromptExpansion sidecar so the
+  // Stop hook can keep enforcing the "only the bound session may drive
+  // this loop" rule against subsequent Stop events. Race protection is
+  // the Stop hook's job; continue.js itself is a synchronous user action
+  // and does not gate on verification — it just keeps the binding fresh.
+  const state = refreshSessionBinding({
     state: rawState,
     stateFile,
     workspaceRoot,

@@ -140,6 +140,8 @@ Review the staged changes for quality
 
 `session_id` is bound at activation by the `UserPromptExpansion` hook (`bind-session.js`): when you type `/code-review-loop` or `/continue-loop`, the hook captures the session id and writes it to `.claude/code-review.pending-session.txt`; the slash command body consumes that sidecar and writes the value into state. If the hook didn't fire (older Claude Code, or hook not yet registered), `session_id` stays `null` and the plugin falls back to claim-on-first-stop — the first Stop event with a `session_id` then claims the loop. After binding, only the bound session may drive the loop forward; other sessions' Stop events are silently ignored. See *Diagnostics* below to verify or debug.
 
+`/continue-loop` mirrors `/code-review-loop`'s lenient handling: if the hook delivers `session_id`, `continue.js` refreshes `state.session_id` (claim or rebind) so subsequent Stop events fire against the most-recently-driving session; if the hook delivers nothing, `continue.js` leaves the existing binding alone and proceeds silently. Race protection against wrong-session Stop hooks lives in `session-stop.js`, which receives `session_id` reliably and enforces the binding there. To diagnose missing hook delivery, set `CODE_REVIEW_DEBUG=1` — `bind-session.js` will dump the raw hook input to `.claude/code-review.bind-session.log`.
+
 ## Monitoring
 
 ```powershell

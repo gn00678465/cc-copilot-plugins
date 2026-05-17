@@ -71,10 +71,17 @@ function isTargetedCommand(commandName) {
 function readHookInput() {
   try {
     const raw = fs.readFileSync(0, 'utf8').trim();
-    if (!raw) return {};
-    return JSON.parse(raw);
+    if (!raw) return { __raw: '' };
+    const parsed = JSON.parse(raw);
+    // Stash the raw stdin so debug logging can dump it verbatim when needed.
+    // Property name is __ prefixed so it can never collide with a real input
+    // field added by future Claude Code versions.
+    Object.defineProperty(parsed, '__raw', {
+      value: raw, enumerable: false, configurable: true, writable: true,
+    });
+    return parsed;
   } catch (_) {
-    return {};
+    return { __raw: '' };
   }
 }
 
@@ -111,6 +118,13 @@ function main() {
     `fire expansion_type=${expansionType} command_name=${commandName} ` +
     `has_session=${!!sessionId}`
   );
+  // When debugging the session_id delivery issue, dumping the full raw
+  // stdin reveals whether the host omitted the field, used a different
+  // key, or didn't fire the hook with valid JSON. Costs nothing unless
+  // CODE_REVIEW_DEBUG is on.
+  if (process.env.CODE_REVIEW_DEBUG && input.__raw) {
+    appendDebugLog(cwd, `raw_input=${input.__raw.slice(0, 2048)}`);
+  }
 
   if (!isTargetedCommand(commandName)) {
     // Not our slash command. Stay out of the way.
@@ -119,7 +133,9 @@ function main() {
 
   if (!sessionId) {
     // Targeted command but the host didn't supply session_id. Downstream
-    // falls back to legacy claim-on-first-stop behavior.
+    // continue.js downgrades the bound-but-unverified case to a warning,
+    // so the workflow still works — we just lose multi-session isolation
+    // for this invocation.
     appendDebugLog(cwd, 'skip: no session_id in input');
     process.exit(0);
   }

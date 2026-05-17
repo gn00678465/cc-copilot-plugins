@@ -647,6 +647,64 @@
           "description": "copilot.js is not spawned"
         }
       ]
+    },
+    {
+      "id": 24,
+      "name": "continue-loop-no-sidecar-silently-proceeds",
+      "prompt": "Verify that continue.js mirrors reviewer.js's lenient session_id handling: when UserPromptExpansion delivers no sidecar (observed on Claude Code versions whose slash-command path doesn't propagate session_id), continue.js MUST NOT verify or hard-fail — race protection lives in session-stop.js, not here. Setup: git repo with a committed file + dirty working tree. .claude/code-review.local.md with iteration:1, max_iterations:3, model:'gpt-5-mini', mode:'claude', session_id:'abc12345-aaaa-bbbb-cccc-dddddddddddd'. DO NOT create .claude/code-review.pending-session.txt. Intercept copilot.js with a shim that prints 'SHIM-REVIEW\\nImportant: foo\\n'. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js.",
+      "expected_output": "Exit code 0. continue.js silently proceeds — stderr has neither a session-binding warning nor the legacy hard-fail message. State advances: iteration becomes 2, base_revision/head_sha populated. session_id is preserved unchanged (no incoming session_id to refresh with).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "exit_code_zero",
+          "description": "exit code is 0 — missing sidecar must not block continue.js"
+        },
+        {
+          "name": "no_session_binding_warning",
+          "description": "stderr does NOT contain 'session binding cannot be verified' — we deliberately don't warn in this case (race protection is the Stop hook's job, not continue.js's)"
+        },
+        {
+          "name": "no_hard_fail_message",
+          "description": "stderr does NOT contain the legacy hard-fail wording about /cancel-review then /code-review-loop"
+        },
+        {
+          "name": "iteration_advanced",
+          "description": ".claude/code-review.local.md shows iteration: 2 after the run"
+        },
+        {
+          "name": "state_session_id_preserved",
+          "description": ".claude/code-review.local.md still has session_id: 'abc12345-aaaa-bbbb-cccc-dddddddddddd' (no incoming session_id means we leave the existing binding intact)"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "name": "continue-loop-sidecar-rebinds-when-different",
+      "prompt": "Verify that continue.js refreshes state.session_id when a sidecar is present and the incoming session differs from the bound one. Rationale: a /continue-loop from a different session is the user authoritatively driving the loop from that session; the Stop hook will then enforce isolation for subsequent events. Setup: same as eval 24 but additionally create .claude/code-review.pending-session.txt containing 'ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb'. Run: node plugins/code-review/skills/code-review-loop/scripts/continue.js.",
+      "expected_output": "Exit code 0. stderr contains 'Code review loop rebound to session ffffffff…'. .claude/code-review.local.md's session_id is updated to 'ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb'. Iteration advances to 2. Sidecar file is consumed (deleted).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "exit_code_zero",
+          "description": "exit code is 0"
+        },
+        {
+          "name": "rebind_notice_emitted",
+          "description": "stderr contains 'rebound to session' and the short prefix 'ffffffff'"
+        },
+        {
+          "name": "state_session_id_refreshed",
+          "description": ".claude/code-review.local.md has session_id: 'ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb' (overwriting the old binding 'abc12345…')"
+        },
+        {
+          "name": "sidecar_consumed",
+          "description": ".claude/code-review.pending-session.txt no longer exists after the run"
+        },
+        {
+          "name": "iteration_advanced",
+          "description": "iteration becomes 2"
+        }
+      ]
     }
   ]
 }
