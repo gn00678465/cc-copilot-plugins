@@ -3,31 +3,22 @@
 'use strict';
 
 /**
- * Code Review Stop Hook
+ * Code Review Stop Hook (iteration 2+ driver).
  *
- * Runs when Claude Code tries to exit. Checks if a review loop is active,
- * determines whether the Reviewer (Copilot CLI) has issued
- * <promise>APPROVAL</promise> on the final non-empty line of its persisted
- * report, and either allows the session to end or blocks the exit by
- * re-invoking the reviewer on the incremental diff.
+ * Runs on every Claude Code Stop event. If a review loop is active AND this
+ * Stop event came from the session that owns the loop, decides:
+ *   - reviewer report ends with APPROVAL → clear state + clear report → allow exit
+ *   - max_iterations hit                  → suspend (preserve state) → allow exit
+ *   - no new diff since last iteration    → tell writer to commit/fix → allow exit
+ *   - otherwise                            → spawn reviewer on incremental
+ *                                            diff, persist report atomically,
+ *                                            block exit with the report fed back
  *
- * The writer/fixer session does NOT participate in the approval decision —
- * its last message is intentionally ignored. Only the reviewer's report
- * (code-review.last-report.md) can terminate the loop.
+ * State lifecycle: only APPROVAL clears code-review.local.md. Every other
+ * outcome preserves it so the next iteration has context to resume from.
  *
- * State file lifecycle:
- *   code-review.local.md carries iteration state across Stop events. It is
- *   cleared ONLY on confirmed reviewer APPROVAL — the one moment the loop
- *   is genuinely ending. Every other outcome (max-iterations hit, no diff
- *   since last iteration, parse errors, unresolved base commit) preserves
- *   the state so the next iteration has a reference to resume from. Users
- *   can discard a stuck loop explicitly via /cancel-review.
- *
- * Hook input (stdin): {
- *   "cwd": "/path/to/project",
- *   ...
- * }
- * Hook output (stdout): JSON block decision, or empty to allow exit.
+ * Session isolation: when state.session_id is set, only the matching
+ * incoming session_id may drive the loop; foreign sessions return silently.
  *
  * Usage: node session-stop.js [claude|copilot]   (default: claude)
  */
@@ -50,65 +41,71 @@ const {
   computeNextRange,
   invokeReviewer,
   composeIterationPrompt,
+  buildIterationReason,
 } = require(
   path.resolve(__dirname, '..', 'skills', 'code-review-loop', 'scripts', 'iterate.js')
 );
 
-// ---------------------------------------------------------------------------
-// Hook input
-// ---------------------------------------------------------------------------
-
 function readHookInput() {
   const raw = fs.readFileSync(0, 'utf8').trim();
-  if (!raw) return {};
-  return JSON.parse(raw);
+  return raw ? JSON.parse(raw) : {};
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
 async function main() {
-  const mode = (process.argv[2] === 'copilot') ? 'copilot' : 'claude';
-  const dotDir = `.${mode}`; // '.claude' or '.copilot'
+  const mode = process.argv[2] === 'copilot' ? 'copilot' : 'claude';
+  const dotDir = `.${mode}`;
 
   const input = readHookInput();
-  const workspaceRoot = resolveWorkspaceRoot(input.cwd);
-  const stateFile = resolveStateFile(workspaceRoot, dotDir);
-  const reportFile = resolveReportFile(workspaceRoot, dotDir);
+  const root = resolveWorkspaceRoot(input.cwd);
+  const stateFile = resolveStateFile(root, dotDir);
+  const reportFile = resolveReportFile(root, dotDir);
 
-  if (!fs.existsSync(stateFile)) {
-    return; // No active review loop — allow exit silently
-  }
+  if (!fs.existsSync(stateFile)) return; // no active loop
 
   let state;
   try {
     state = loadState(stateFile);
   } catch (err) {
-    // State is corrupt but may represent user work in progress — DO NOT
-    // auto-delete. Warn and let the user inspect or run /cancel-review.
+    // Corrupt state may represent user work-in-progress — do NOT auto-delete.
     process.stderr.write(
       `⚠️  Code review loop: failed to parse .${mode}/code-review.local.md ` +
-      `(${err.message}). The state file is corrupt — inspect it manually or ` +
-      `run /cancel-review to discard it.\n`
+      `(${err.message}). Inspect manually or run /cancel-review.\n`
     );
     return;
   }
 
   if (!state.active) return;
 
-  // Approval check — SOURCE OF TRUTH is the reviewer's persisted report, NOT
-  // the writer's last message. The reviewer is the only party authorized to
-  // emit the terminator token, so we inspect only its output. This prevents
-  // the writer from falsely terminating the loop by quoting or paraphrasing
-  // ambiguous reviewer prose (e.g. "not recommended to approve").
-  //
-  // APPROVAL is also the ONLY path that clears state — see module doc.
-  const latestReport = readReportFile(reportFile);
-  if (hasApprovalInReport(latestReport)) {
+  // --- Session isolation --------------------------------------------------
+  // state.session_id null → first Stop event with an id claims the loop.
+  // state.session_id set  → only matching session may drive; others silent.
+  // Fail-closed: bound state + anonymous Stop event → return without acting.
+  const incoming = (typeof input.session_id === 'string' && input.session_id)
+    ? input.session_id : null;
+
+  if (typeof state.session_id === 'string' && state.session_id) {
+    if (!incoming || incoming !== state.session_id) return;
+  } else if (incoming) {
+    try {
+      state = { ...state, session_id: incoming };
+      saveState(stateFile, state);
+      process.stderr.write(
+        `🔒 Code review loop bound to session ${incoming.slice(0, 8)}…\n` +
+        `   If this is not the driving session, /cancel-review and re-run.\n`
+      );
+    } catch (err) {
+      process.stderr.write(
+        `⚠️  Code review loop: failed to record session_id (${err.message}). ` +
+        `Continuing without binding.\n`
+      );
+    }
+  }
+  // else: unbound + no incoming id → legacy behavior, no isolation.
+
+  // --- APPROVAL check (single source of truth: reviewer's persisted report)
+  if (hasApprovalInReport(readReportFile(reportFile))) {
     process.stdout.write(
-      '✅ Code review loop: Reviewer issued APPROVAL in its latest report. ' +
-      'Session complete.\n'
+      '✅ Code review loop: Reviewer issued APPROVAL. Session complete.\n'
     );
     clearState(stateFile);
     clearReportFile(reportFile);
@@ -116,124 +113,83 @@ async function main() {
   }
 
   const iteration = typeof state.iteration === 'number' ? state.iteration : 0;
-  const maxIterations = typeof state.max_iterations === 'number' ? state.max_iterations : 0;
+  const maxIter = typeof state.max_iterations === 'number' ? state.max_iterations : 0;
 
-  if (maxIterations > 0 && iteration >= maxIterations) {
-    // Loop is suspended, not terminated. State is preserved so the user can
-    // resume via /continue-loop or discard via /cancel-review. We do NOT
-    // auto-clear state here.
+  if (maxIter > 0 && iteration >= maxIter) {
     process.stdout.write(
-      `🛑 Code review loop: max iterations (${maxIterations}) reached at ` +
+      `🛑 Code review loop: max iterations (${maxIter}) reached at ` +
       `iteration ${iteration}. Loop suspended; state preserved.\n` +
-      `  - To continue, run /continue-loop --max-iterations <N>  (N > ${iteration}).\n` +
-      `  - To discard state, run /cancel-review.\n`
+      `  - Continue: /continue-loop --max-iterations <N>  (N > ${iteration}).\n` +
+      `  - Discard:  /cancel-review.\n`
     );
     return;
   }
 
-  // Not approved — compute the incremental diff range and block the stop.
-  const range = computeNextRange(state, workspaceRoot);
+  // --- Incremental range
+  const range = computeNextRange(state, root);
   if (range.reason === 'no-diff') {
     process.stderr.write(
-      `⚠️  Code review loop: no changes detected since iteration ${iteration}. ` +
-      `Address the reviewer's findings before exiting, or run /cancel-review ` +
-      `to end the loop. State preserved.\n`
+      `⚠️  Code review loop: no new changes since iteration ${iteration}.\n` +
+      `\n` +
+      `   If you already fixed something, commit it so the reviewer can see it:\n` +
+      `       git add <changed files>\n` +
+      `       git commit -m "fix: <short description>"\n` +
+      `\n` +
+      `   Otherwise address the reviewer's findings first.\n` +
+      `   /cancel-review discards the loop; state preserved otherwise.\n`
     );
     return;
   }
-
-  const newBase = range.base;
-  const newHead = range.head;
-
-  if (!newBase) {
-    // Environmental error — no HEAD commit. Don't nuke state; let the user
-    // correct the repo state or explicitly cancel.
+  if (!range.base) {
     process.stderr.write(
       `⚠️  Code review loop: unable to resolve base_revision (no HEAD commit). ` +
-      `Run /cancel-review if this loop should be discarded. State preserved.\n`
+      `State preserved; run /cancel-review to discard.\n`
     );
     return;
   }
 
-  // 3) Persist updated state
-  const nextIteration = iteration + 1;
+  // --- Advance state + run reviewer
+  const next = iteration + 1;
   saveState(stateFile, {
     ...state,
-    iteration: nextIteration,
-    base_revision: newBase,
-    head_sha: newHead,
+    iteration: next,
+    base_revision: range.base,
+    head_sha: range.head,
   });
 
-  // 4) Re-invoke the Copilot reviewer for the new range. The writer/fixer
-  //    (the main session) must NEVER review the diff themselves — this hook
-  //    owns the reviewer role to preserve writer/reviewer separation.
-  const reviewerModel = (typeof state.model === 'string' && state.model)
-    ? state.model
-    : DEFAULT_REVIEWER_MODEL;
-
+  const reviewerModel = state.model || DEFAULT_REVIEWER_MODEL;
   const reviewerPrompt = composeIterationPrompt({
-    base: newBase,
-    head: newHead,
-    iteration: nextIteration,
-    maxIterations,
+    base: range.base,
+    head: range.head,
+    iteration: next,
+    maxIterations: maxIter,
   });
 
   const reviewerReport = invokeReviewer({
-    workspaceRoot,
+    workspaceRoot: root,
     model: reviewerModel,
     prompt: reviewerPrompt,
   });
 
-  // Persist the reviewer's latest report — this is the sole source of truth
-  // the next stop-hook invocation will consult for the approval verdict.
-  // When the invocation failed, explicitly clear the previous report so a
-  // stale APPROVAL from an earlier iteration cannot trigger false completion.
-  if (reviewerReport) {
-    writeReportFile(reportFile, reviewerReport);
-  } else {
-    clearReportFile(reportFile);
-  }
+  // Atomic persist; clear on failure so a stale APPROVAL from an earlier
+  // iteration cannot trigger false completion on the next Stop event.
+  if (reviewerReport) writeReportFile(reportFile, reviewerReport);
+  else clearReportFile(reportFile);
 
-  const reason = reviewerReport
-    ? [
-        `The Copilot reviewer produced the following report for git range \`${newBase}..${newHead}\`.`,
-        `You are the writer/fixer — DO NOT conduct your own review; act only on this report.`,
-        '',
-        '---',
-        reviewerReport,
-        '---',
-        '',
-        'Your job now:',
-        '  1. Fix every Critical and Important finding above.',
-        '  2. DO NOT emit `<promise>APPROVAL</promise>` yourself — that token',
-        '     is reserved for the reviewer. The stop hook inspects the',
-        '     persisted reviewer report, not your messages.',
-        '  3. When done, exit your turn; the stop hook will either detect',
-        '     the reviewer\'s APPROVAL on its next check or re-invoke the',
-        '     reviewer on the new diff for another iteration.',
-      ].join('\n')
-    : [
-        `The Copilot reviewer could not be invoked for git range \`${newBase}..${newHead}\`.`,
-        'Do NOT review the diff yourself. Do NOT emit the approval token.',
-        'Re-invoke the reviewer by running:',
-        '',
-        `  node \${CLAUDE_PLUGIN_ROOT}/skills/code-review-loop/scripts/copilot.js \\`,
-        `    --prompt "Review incremental changes in git range ${newBase}..${newHead}" \\`,
-        `    --model ${reviewerModel}`,
-        '',
-        'Then fix what that report flags. Only the reviewer can terminate the loop.',
-      ].join('\n');
+  const reason = buildIterationReason({
+    base: range.base,
+    head: range.head,
+    reviewerReport,
+  });
 
-  process.stdout.write(
-    JSON.stringify({
-      decision: 'block',
-      reason,
-      systemMessage:
-        `🔄 Code Review iteration ${nextIteration} | ` +
-        `Range: ${newBase.slice(0, 7)}..${newHead.slice(0, 7)} | ` +
-        `Reviewer: ${reviewerReport ? 'Copilot report persisted' : 'invocation failed — report cleared'}`,
-    }, null, 2) + '\n'
-  );
+  process.stdout.write(JSON.stringify({
+    decision: 'block',
+    reason,
+    systemMessage:
+      `🔄 Code Review iteration ${next} | ` +
+      `Range: ${range.base.slice(0, 7)}..${range.head.slice(0, 7)} | ` +
+      `Reviewer: ${reviewerReport ? 'report persisted' : 'invocation failed — report cleared'}`,
+  }, null, 2) + '\n');
 }
 
 main().catch((err) => {
