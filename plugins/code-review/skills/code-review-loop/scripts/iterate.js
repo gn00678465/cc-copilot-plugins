@@ -3,14 +3,19 @@
 /**
  * Shared iteration helpers for the code-review loop.
  *
- * Consumed by session-stop.js (iteration 2+ from Stop hook) and continue.js
- * (manual resume via /continue-loop). Extracted so both entry points use the
- * same state I/O, git snapshot, and reviewer-invocation semantics.
+ * Consumed by session-stop.js (iteration 2+) and continue.js (manual resume).
+ * State I/O, git snapshot, reviewer invocation, and prompt composition all
+ * live here so both entry points behave identically.
  */
 
 const fs = require('fs');
 const path = require('path');
 const { execSync, execFileSync } = require('child_process');
+
+const {
+  composeIterationPrompt,
+  buildIterationReason,
+} = require('./prompts.js');
 
 // ---------------------------------------------------------------------------
 // Approval detection
@@ -22,12 +27,8 @@ function hasApprovalInReport(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   let i = lines.length - 1;
-  // Skip purely blank trailing lines (whitespace-only counts as blank).
   while (i >= 0 && lines[i].trim() === '') i--;
-  if (i < 0) return false;
-  // Compare the raw line — the contract is an *exact* token on its own
-  // final line; any leading/trailing whitespace fails the match.
-  return APPROVAL_LINE_PATTERN.test(lines[i]);
+  return i >= 0 && APPROVAL_LINE_PATTERN.test(lines[i]);
 }
 
 // ---------------------------------------------------------------------------
@@ -37,51 +38,93 @@ function hasApprovalInReport(text) {
 function gitStashCreate(cwd) {
   try {
     return execSync('git stash create', { cwd, encoding: 'utf8' }).trim();
-  } catch (_) {
-    return '';
-  }
+  } catch (_) { return ''; }
 }
 
 function gitHeadCommit(cwd) {
   try {
     return execSync('git rev-parse HEAD', { cwd, encoding: 'utf8' }).trim();
-  } catch (_) {
-    return '';
-  }
+  } catch (_) { return ''; }
+}
+
+// Tree-hash via `git show -s --format=%T` is Windows-safe.
+// `git rev-parse <sha>^{tree}` triggers cmd.exe caret-escape on Git-for-Windows
+// shims and silently breaks; this form has no shell metacharacters.
+function gitTreeHash(ref, cwd) {
+  if (!ref) return '';
+  try {
+    return execFileSync(
+      'git',
+      ['show', '-s', '--format=%T', ref],
+      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    ).trim();
+  } catch (_) { return ''; }
 }
 
 // ---------------------------------------------------------------------------
 // Workspace / path resolution
 // ---------------------------------------------------------------------------
 
-function resolveWorkspaceRoot(cwd) {
-  return cwd || process.cwd();
-}
-
-function resolveStateFile(workspaceRoot, dotDir) {
-  return path.join(workspaceRoot, dotDir, 'code-review.local.md');
-}
-
-function resolveReportFile(workspaceRoot, dotDir) {
-  return path.join(workspaceRoot, dotDir, 'code-review.last-report.md');
-}
+function resolveWorkspaceRoot(cwd) { return cwd || process.cwd(); }
+function resolveStateFile(root, dotDir) { return path.join(root, dotDir, 'code-review.local.md'); }
+function resolveReportFile(root, dotDir) { return path.join(root, dotDir, 'code-review.last-report.md'); }
 
 // ---------------------------------------------------------------------------
-// Report file I/O
+// Pending-session sidecar
+//
+// UserPromptExpansion hook writes the activating session_id to
+// .claude/code-review.pending-session.txt before reviewer.js / continue.js
+// runs. The body consumes (read + unlink) it once and records the id into
+// state so the Stop hook can later enforce session isolation.
 // ---------------------------------------------------------------------------
 
-function readReportFile(reportFile) {
+const PENDING_SESSION_REL = path.join('.claude', 'code-review.pending-session.txt');
+
+function resolvePendingSessionFile(root) {
+  return path.join(root, PENDING_SESSION_REL);
+}
+
+function consumePendingSessionId(root) {
+  const file = resolvePendingSessionFile(root);
   try {
-    return fs.readFileSync(reportFile, 'utf8');
-  } catch (_) {
-    return '';
+    const raw = fs.readFileSync(file, 'utf8').trim();
+    fs.unlinkSync(file);
+    return raw || null;
+  } catch (_) { return null; }
+}
+
+// ---------------------------------------------------------------------------
+// Atomic file I/O
+//
+// Both state and report files use tmp+rename. The report file is the
+// critical one: the writer/fixer reads it mid-loop, and the previous
+// implementation could expose partial content if the reviewer (running
+// with --allow-all-tools) wrote to it directly before the script's
+// final overwrite. Atomic rename guarantees readers only see the
+// fully-captured stdout.
+// ---------------------------------------------------------------------------
+
+function atomicWrite(filePath, contents) {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+  try {
+    fs.writeFileSync(tmp, contents, 'utf8');
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch (_) {}
+    throw err;
   }
 }
 
+function readReportFile(reportFile) {
+  try { return fs.readFileSync(reportFile, 'utf8'); }
+  catch (_) { return ''; }
+}
+
 function writeReportFile(reportFile, text) {
-  try {
-    fs.writeFileSync(reportFile, text ?? '', 'utf8');
-  } catch (err) {
+  try { atomicWrite(reportFile, text ?? ''); }
+  catch (err) {
     process.stderr.write(
       `⚠️  Code review loop: failed to persist reviewer report: ${err.message}\n`
     );
@@ -93,15 +136,14 @@ function clearReportFile(reportFile) {
 }
 
 // ---------------------------------------------------------------------------
-// State frontmatter parse / serialize
+// State frontmatter parse / serialise
 // ---------------------------------------------------------------------------
 
 function parseFrontmatter(raw) {
   const lines = raw.split('\n');
-  if (lines[0].trim() !== '---') return { state: {}, body: raw };
-
+  if (lines[0].trim() !== '---') return { state: {} };
   const closeIdx = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
-  if (closeIdx === -1) return { state: {}, body: raw };
+  if (closeIdx === -1) return { state: {} };
 
   const state = {};
   for (const line of lines.slice(1, closeIdx)) {
@@ -118,7 +160,7 @@ function parseFrontmatter(raw) {
 
   const body = lines.slice(closeIdx + 1).join('\n').trim();
   if (body) state.prompt = body;
-  return { state, body };
+  return { state };
 }
 
 function serializeFrontmatter(state) {
@@ -134,20 +176,11 @@ function serializeFrontmatter(state) {
 }
 
 function loadState(stateFile) {
-  const raw = fs.readFileSync(stateFile, 'utf8');
-  return parseFrontmatter(raw).state;
+  return parseFrontmatter(fs.readFileSync(stateFile, 'utf8')).state;
 }
 
 function saveState(stateFile, state) {
-  const uniqueSuffix = Date.now() + Math.random().toString(36).slice(2);
-  const tmpPath = `${stateFile}.tmp.${uniqueSuffix}`;
-  try {
-    fs.writeFileSync(tmpPath, serializeFrontmatter(state), 'utf8');
-    fs.renameSync(tmpPath, stateFile);
-  } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch (_) {}
-    throw err;
-  }
+  atomicWrite(stateFile, serializeFrontmatter(state));
 }
 
 function clearState(stateFile) {
@@ -155,31 +188,38 @@ function clearState(stateFile) {
 }
 
 // ---------------------------------------------------------------------------
-// Incremental-diff range computation
+// Incremental diff range
 //
-// Returns { base, head } for the next review iteration given the last-seen
-// head in state. Preference order:
+// Returns { base, head } for the next iteration. Preference order:
 //   1. Working-tree snapshot via `git stash create` (uncommitted fixes).
 //   2. Current HEAD if it has advanced since last iteration (writer committed).
-//   3. Nothing new — return { reason: 'no-diff' } so callers can reject or
-//      hold position.
+//   3. Nothing new → { reason: 'no-diff' }.
 //
-// prevRef falls back to initial_head when head_sha is still null (e.g. the
-// loop is still on its first iteration but /continue-loop was invoked).
+// Stash-to-stash empty diff guard: when prevRef and the new stash share the
+// same tree hash, the writer didn't actually change anything. Drop to no-diff
+// so we don't run a pointless reviewer pass.
 // ---------------------------------------------------------------------------
-function computeNextRange(state, workspaceRoot) {
+
+function computeNextRange(state, root) {
   const prevRef = (typeof state.head_sha === 'string' && state.head_sha)
     ? state.head_sha
     : (typeof state.initial_head === 'string' && state.initial_head)
     ? state.initial_head
     : null;
 
-  const snapshot = gitStashCreate(workspaceRoot);
+  const snapshot = gitStashCreate(root);
   if (snapshot) {
-    return { base: prevRef || gitHeadCommit(workspaceRoot), head: snapshot };
+    if (prevRef) {
+      const prevTree = gitTreeHash(prevRef, root);
+      const newTree = gitTreeHash(snapshot, root);
+      if (prevTree && newTree && prevTree === newTree) {
+        return { base: null, head: null, reason: 'no-diff' };
+      }
+    }
+    return { base: prevRef || gitHeadCommit(root), head: snapshot };
   }
 
-  const currentHead = gitHeadCommit(workspaceRoot);
+  const currentHead = gitHeadCommit(root);
   if (currentHead && prevRef && currentHead !== prevRef) {
     return { base: prevRef, head: currentHead };
   }
@@ -189,20 +229,12 @@ function computeNextRange(state, workspaceRoot) {
 
 // ---------------------------------------------------------------------------
 // Reviewer invocation
-//
-// Spawns copilot.js synchronously, returning trimmed stdout on success or
-// null on failure. Failure is logged to stderr but does not throw; callers
-// decide whether to clear a stale report, preserve state, etc.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_REVIEWER_MODEL = 'gpt-5.4';
 
-function resolveCopilotScript() {
-  return path.resolve(__dirname, 'copilot.js');
-}
-
 function invokeReviewer({ workspaceRoot, model, prompt }) {
-  const copilotScript = resolveCopilotScript();
+  const copilotScript = path.resolve(__dirname, 'copilot.js');
   try {
     const out = execFileSync(
       process.execPath,
@@ -223,43 +255,18 @@ function invokeReviewer({ workspaceRoot, model, prompt }) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Iteration-2+ reviewer prompt composition
-//
-// Assembled from three fragments:
-//   1. The range-focused review instruction (base..head).
-//   2. buildExclusionClause() — tells the reviewer to skip the plugin's own
-//      state files if they happen to be tracked in git.
-//   3. buildLoopContextSuffix() — injects emotional-stimuli context on the
-//      final 1–2 iterations to lift reviewer rigour.
-// ---------------------------------------------------------------------------
-
-function composeIterationPrompt({ base, head, iteration, maxIterations }) {
-  const { buildExclusionClause, buildLoopContextSuffix } = require('./copilot.js');
-  return (
-    `Review the incremental changes in this git range: \`${base}..${head}\`.\n\n` +
-    `Run \`git diff ${base}..${head}\` to see exactly what changed ` +
-    `since the previous review iteration. Apply the same multi-axis ` +
-    `review (correctness / quality / security / performance) focused ` +
-    `ONLY on these changes.` +
-    buildExclusionClause() +
-    buildLoopContextSuffix(iteration, maxIterations)
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
-
 module.exports = {
   APPROVAL_LINE_PATTERN,
   DEFAULT_REVIEWER_MODEL,
   hasApprovalInReport,
   gitStashCreate,
   gitHeadCommit,
+  gitTreeHash,
   resolveWorkspaceRoot,
   resolveStateFile,
   resolveReportFile,
+  resolvePendingSessionFile,
+  consumePendingSessionId,
   readReportFile,
   writeReportFile,
   clearReportFile,
@@ -271,4 +278,5 @@ module.exports = {
   computeNextRange,
   invokeReviewer,
   composeIterationPrompt,
+  buildIterationReason,
 };
