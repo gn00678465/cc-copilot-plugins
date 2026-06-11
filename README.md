@@ -8,6 +8,7 @@
 |------|------|----------|------|
 | `cc-copilot-plugin` | 0.1.2 | Claude Code / GitHub Copilot CLI 工作流 | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
 | `code-review` | 0.1.0 | Claude Code + 本機 `copilot` CLI | 自動化多輪 code review loop，強制分離 writer / reviewer 角色，提供 `/code-review-loop`、`/continue-loop` 與 `/cancel-review` |
+| `review-forge` | 0.1.0 | Claude Code 及跨 client Agent Skills | 多模型程式碼審查工作流：獨立審查 → 彙總去重 → 交叉投票 → 信心排序最終報告 → 核准修復 → 獨立驗證 |
 
 ## Claude Code 安裝方式
 
@@ -23,6 +24,7 @@
 ```text
 /plugin install cc-copilot-plugin@cc-copilot-plugins
 /plugin install code-review@cc-copilot-plugins
+/plugin install review-forge@cc-copilot-plugins
 /reload-plugins
 ```
 
@@ -32,7 +34,8 @@
 {
   "enabledPlugins": {
     "cc-copilot-plugin@cc-copilot-plugins": true,
-    "code-review@cc-copilot-plugins": true
+    "code-review@cc-copilot-plugins": true,
+    "review-forge@cc-copilot-plugins": true
   }
 }
 ```
@@ -41,6 +44,7 @@
 
 - `cc-copilot-plugin`: `commit-message`、`pull-request`
 - `code-review`: `/code-review-loop`、`/continue-loop`、`/cancel-review`
+- `review-forge`: `review-forge` skill（`review` / `synthesize` / `vote` / `report` / `fix` / `verify` 六階段命令）
 
 > `code-review` 另需先安裝 GitHub Copilot CLI，並確認 `copilot` 可於 `PATH` 中執行。
 
@@ -77,6 +81,7 @@ copilot plugin list
 
 - [`plugins/cc-copilot-plugin`](./plugins/cc-copilot-plugin)
 - [`plugins/code-review`](./plugins/code-review)
+- [`plugins/review-forge`](./plugins/review-forge)
 
 ## 參考
 
