@@ -1,0 +1,7 @@
+interface:
+  display_name: "Review Forge"
+  short_description: "Multi-agent code review triage and fix workflow"
+  default_prompt: "Use $review-forge to review this branch, synthesize findings into a fix checklist, and verify selected fixes."
+
+policy:
+  allow_implicit_invocation: true

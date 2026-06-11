@@ -18,6 +18,11 @@
             "name": "code-review",
             "source": "./plugins/code-review",
             "description": "Professional code review loop plugin with automated reviewer relay"
+        },
+        {
+            "name": "review-forge",
+            "source": "./plugins/review-forge",
+            "description": "Multi-model code review workflow: independent reviews, synthesis, cross-voting, confidence-ranked final reports, approved fixes, and independent verification"
         }
     ]
 }

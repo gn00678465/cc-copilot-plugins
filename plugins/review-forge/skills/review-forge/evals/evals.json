@@ -1,0 +1,36 @@
+{
+  "skill_name": "review-forge",
+  "evals": [
+    {
+      "id": 0,
+      "name": "vote-command-abstain-on-own-findings",
+      "prompt": "Use the review-forge skill: vote feature: demo model: gemini-3.5. The repo has .review/demo/summary.md with synthesized findings.",
+      "expected_output": "Creates exactly .review/demo/gemini-3.5-vote.md with one vote per finding using enums confirm/dispute/unsure/abstain; abstains on RF-002 and RF-004 (sources include gemini-3.5); votes with code evidence on RF-001 and RF-003; does not modify summary.md, product code, or other files.",
+      "files": ["fixture-vote"],
+      "assertions": [
+        "Creates .review/demo/gemini-3.5-vote.md and no other new or modified files",
+        "Votes abstain on RF-002 and RF-004 because their sources include gemini-3.5",
+        "Casts a non-abstain vote (confirm, dispute, or unsure) on RF-001 and RF-003",
+        "Every confirm or dispute vote cites code or diff evidence",
+        "summary.md and src/cart.js are byte-identical to the fixture"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "report-command-weighted-confidence",
+      "prompt": "Use the review-forge skill: report feature: demo model_weights: gpt-5.5: 1.5. The repo has .review/demo/ with summary.md and three vote files.",
+      "expected_output": "Creates .review/demo/final-report.md ordered by severity then confidence score. RF-001 score 1.0 high; RF-002 score 0.2 low; RF-003 score 1.0 high; RF-004 unvoted. All checkboxes unchecked. Records resolved model weights and per-model votes. Does not modify summary.md or vote files.",
+      "files": ["fixture-report"],
+      "assertions": [
+        "Creates .review/demo/final-report.md and no other new or modified files",
+        "RF-001 confidence_score is 1.0 with confidence high (confirm opus-4.6 1.0 + gemini-3.5 1.0, gpt-5.5 abstained)",
+        "RF-002 confidence_score is 0.2 with confidence low (dispute gpt-5.5 weight 1.5, unsure opus-4.6 counts 0.5)",
+        "RF-003 confidence_score is 1.0 with confidence high (only gemini-3.5 eligible, voted confirm)",
+        "RF-004 confidence is unvoted because all three models abstained",
+        "Findings ordered RF-001, RF-003, RF-002, RF-004 (severity first, then score; unvoted last)",
+        "All checklist checkboxes are unchecked",
+        "Resolved model weights recorded including gpt-5.5: 1.5"
+      ]
+    }
+  ]
+}
