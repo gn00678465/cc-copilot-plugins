@@ -26,6 +26,55 @@ verification, and status tracking.
 - `fix`: fix checked items, run tests, and update status.
 - `verify`: verify fixed items, inspect or rerun tests, and update status.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    subgraph collect["① Review — 多模型獨立審查（不動產品碼）"]
+        direction LR
+        R1["review (gpt-5.5)<br/>→ gpt-5.5.md"]
+        R2["review (opus-4.6)<br/>→ opus-4.6.md"]
+        R3["review (gemini-3.5)<br/>→ gemini-3.5.md"]
+    end
+
+    collect --> SYN["② synthesize<br/>合併去重・保留分歧・記 sources/agreement<br/>→ summary.md（checkbox 全未勾）"]
+
+    SYN --> VOTE_Q{"要走投票流程？"}
+
+    subgraph vote_phase["③ Vote — 各模型對每個 finding 投票，自家 finding 投 abstain（獨立、不看他人票）"]
+        direction LR
+        V1["vote (gpt-5.5)<br/>→ gpt-5.5-vote.md"]
+        V2["vote (opus-4.6)<br/>→ opus-4.6-vote.md"]
+        V3["vote (gemini-3.5)<br/>→ gemini-3.5-vote.md"]
+    end
+
+    VOTE_Q -- "是" --> vote_phase
+    vote_phase --> RPT["④ report<br/>confidence = (confirm + 0.5×unsure) ÷ 非棄權權重<br/>severity → confidence 排序<br/>→ final-report.md（checkbox 仍未勾）"]
+
+    RPT --> HUMAN
+    VOTE_Q -- "否（直接人工裁決）" --> HUMAN
+
+    HUMAN{{"⑤ 人工勾選<br/>checked = 核可修復<br/>（投票永遠不授權修復）"}}
+
+    HUMAN --> FIX["⑥ fix<br/>讀 final-report.md（無則 summary.md）<br/>只修勾選項 → fix-plan.md<br/>改碼後跑測試 → status.md"]
+
+    FIX --> TEST{"測試結果？"}
+    TEST -- "通過" --> FIXED["status: fixed ✅"]
+    TEST -- "無法執行" --> BLOCKED["status: test_blocked<br/>記命令・原因・殘餘風險"]
+    TEST -- "失敗" --> FAILED["status: verification_failed /<br/>partially_fixed（不得宣稱已修）"]
+
+    FAILED -. "修正後重來" .-> FIX
+
+    FIXED --> VERIFY["⑦ verify（可選）<br/>獨立視角複核 + 回歸檢查<br/>→ verify.md・status: verified"]
+    BLOCKED --> VERIFY
+
+    HUMAN -. "未勾選項" .-> OPEN["維持 open / wont_fix /<br/>risk_accepted（記錄裁決傾向）"]
+
+    style HUMAN fill:#fff3cd,stroke:#b8860b
+    style FIXED fill:#d4edda,stroke:#2e7d32
+    style FAILED fill:#f8d7da,stroke:#c62828
+```
+
 ## Default Review Scope
 
 When no target or base is specified:
@@ -103,38 +152,38 @@ cp -R plugins/review-forge/skills/review-forge ~/.codex/skills/review-forge
 Then invoke it from a compatible agent with:
 
 ```text
-Use $review-forge to review this branch.
+Use /review-forge to review this branch.
 ```
 
-If a client does not support explicit `$skill` syntax, ask it to use the
+If a client does not support explicit `/skill` syntax, ask it to use the
 `review-forge` skill or select it from the client's skills UI.
 
 ## Example Prompts
 
 ```text
-Use $review-forge review feature: checkout-refactor model: codex.
+Use /review-forge review feature: checkout-refactor model: codex.
 ```
 
 ```text
-Use $review-forge review feature: checkout-refactor model: opencode perspective: security.
+Use /review-forge review feature: checkout-refactor model: opencode perspective: security.
 ```
 
 ```text
-Use $review-forge synthesize feature: checkout-refactor.
+Use /review-forge synthesize feature: checkout-refactor.
 ```
 
 ```text
-Use $review-forge vote feature: checkout-refactor model: gpt-5.5.
+Use /review-forge vote feature: checkout-refactor model: gpt-5.5.
 ```
 
 ```text
-Use $review-forge report feature: checkout-refactor model_weights: gpt-5.5: 1.5.
+Use /review-forge report feature: checkout-refactor model_weights: gpt-5.5: 1.5.
 ```
 
 ```text
-Use $review-forge fix feature: checkout-refactor.
+Use /review-forge fix feature: checkout-refactor.
 ```
 
 ```text
-Use $review-forge verify feature: checkout-refactor.
+Use /review-forge verify feature: checkout-refactor.
 ```
