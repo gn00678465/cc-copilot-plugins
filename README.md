@@ -1,14 +1,14 @@
 # cc-copilot-plugins
 
-本專案是一個 Claude Code Marketplace 倉庫，收錄多個可重用插件；其中也包含供 GitHub Copilot CLI 工作流使用的相關技能與設定。
+本專案收錄多個可重用的 AI 編碼代理插件，支援 Claude Code、Codex 及 OpenCode 等平台。
 
 ## 插件清單
 
-| 插件 | 版本 | 適用環境 | 說明 |
+| 插件 | 版本 | 適用平台 | 說明 |
 |------|------|----------|------|
-| `cc-copilot-plugin` | 0.1.2 | Claude Code / GitHub Copilot CLI 工作流 | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
-| `code-review` | 0.1.0 | Claude Code + 本機 `copilot` CLI | 自動化多輪 code review loop，強制分離 writer / reviewer 角色，提供 `/code-review-loop`、`/continue-loop` 與 `/cancel-review` |
-| `review-forge` | 0.1.0 | Claude Code 及跨 client Agent Skills | 多模型程式碼審查工作流：獨立審查 → 彙總去重 → 交叉投票 → 信心排序最終報告 → 核准修復 → 獨立驗證 |
+| `cc-copilot-plugin` | 0.1.3 | Claude Code / Codex | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
+| `code-review` | 0.1.0 | Claude Code | 自動化多輪 code review loop，強制分離 writer / reviewer 角色，提供 `/code-review-loop`、`/continue-loop` 與 `/cancel-review` |
+| `review-forge` | 0.1.0 | Claude Code / Codex / OpenCode | 多模型程式碼審查工作流：獨立審查 → 彙總去重 → 交叉投票 → 信心排序最終報告 → 核准修復 → 獨立驗證 |
 
 ## Claude Code 安裝方式
 
@@ -48,33 +48,47 @@
 
 > `code-review` 另需先安裝 GitHub Copilot CLI，並確認 `copilot` 可於 `PATH` 中執行。
 
-## VS Code (Agent Plugins & Custom Prompts)
+## Codex 安裝方式
 
-VS Code 已支援 Agent Plugins（Preview）。若您要在 VS Code 內使用本倉庫的插件來源，請先確認 `settings.json` 已啟用：
-
-```json
-{
-  "chat.plugins.enabled": true
-}
-```
-
-接著可在 `chat.plugins.marketplaces` 中加入此儲存庫：
-
-```json
-"chat.plugins.marketplaces": [
-  "gn00678465/cc-copilot-plugins"
-]
-```
-
-若要直接使用專案中的 prompt 檔案，也可搭配 `chat.promptFilesLocations` 指向 `prompts/`。
-
-## GitHub Copilot CLI
-
-如果您已安裝 [GitHub Copilot CLI](https://github.com/github/copilot-cli)，可以安裝對應插件並查看清單：
+**方式一：透過 opencode-market**
 
 ```bash
-copilot plugin install gn00678465/cc-copilot-plugins
-copilot plugin list
+npx opencode-market add gn00678465/cc-copilot-plugins
+npx opencode-market install review-forge@cc-copilot-plugins --local
+```
+
+**方式二：手動複製 skill 目錄**
+
+將 skill 檔案複製到專案的 `.agents/skills/` 目錄，Codex 會自動發現：
+
+```bash
+cp -r plugins/review-forge/skills/review-forge .agents/skills/
+cp -r plugins/cc-copilot-plugin/skills/* .agents/skills/
+```
+
+每個 skill 目錄內含 `agents/openai.yaml` 提供 Codex UI 顯示名稱與預設 prompt。
+
+## OpenCode 安裝方式
+
+**方式一：透過 opencode-market（推薦）**
+
+```bash
+# 註冊 marketplace
+npx opencode-market add gn00678465/cc-copilot-plugins
+
+# 安裝到 .opencode/（OpenCode 專用）
+npx opencode-market install review-forge@cc-copilot-plugins --opencode
+
+# 或安裝到 .agents/（跨平台共用）
+npx opencode-market install review-forge@cc-copilot-plugins --local
+```
+
+**方式二：手動複製 skill 目錄**
+
+將 skill 複製到專案的 `.opencode/skills/`，OpenCode 會自動發現：
+
+```bash
+cp -r plugins/review-forge/skills/review-forge .opencode/skills/
 ```
 
 ## 目錄
@@ -85,7 +99,7 @@ copilot plugin list
 
 ## 參考
 
-- [VS Code docs: Custom prompt files](https://code.visualstudio.com/docs/copilot/customization/overview?originUrl=%2Fdocs%2Fcopilot%2Fcustomization%2Fprompt-files)
-- [GitHub Docs: Plugins for Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-finding-installing)
-- [Will 保哥整理的最佳 GitHub Copilot 設定](https://github.com/doggy8088/github-copilot-configs)
-- [Awesome GitHub Copilot Customizations](https://github.com/github/awesome-copilot)
+- [Claude Code Plugins](https://docs.anthropic.com/en/docs/claude-code/plugins)
+- [Codex Agent Skills](https://github.com/openai/skills)
+- [OpenCode Plugins](https://opencode.ai/docs/plugins/)
+- [OpenCode Skills](https://opencode.ai/docs/skills/)
