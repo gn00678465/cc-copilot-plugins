@@ -50,20 +50,17 @@
 
 ## Codex 安裝方式
 
-**方式一：透過 opencode-market**
+先加入 Marketplace 來源：
 
-```bash
-npx opencode-market add gn00678465/cc-copilot-plugins
-npx opencode-market install review-forge@cc-copilot-plugins --local
+```text
+codex plugin marketplace add gn00678465/cc-copilot-plugins
 ```
 
-**方式二：手動複製 skill 目錄**
+再依需求安裝插件：
 
-將 skill 檔案複製到專案的 `.agents/skills/` 目錄，Codex 會自動發現：
-
-```bash
-cp -r plugins/review-forge/skills/review-forge .agents/skills/
-cp -r plugins/cc-copilot-plugin/skills/* .agents/skills/
+```text
+codex plugin add cc-copilot-plugin@cc-copilot-plugins
+codex plugin add review-forge@cc-copilot-plugins
 ```
 
 每個 skill 目錄內含 `agents/openai.yaml` 提供 Codex UI 顯示名稱與預設 prompt。
