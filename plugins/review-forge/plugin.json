@@ -1,0 +1,6 @@
+{
+  "name": "review-forge",
+  "version": "0.1.0",
+  "description": "Multi-model code review workflow: independent reviews, synthesis, cross-voting, confidence-ranked final reports, approved fixes, and independent verification",
+  "skills": "./skills/"
+}

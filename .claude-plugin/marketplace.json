@@ -1,7 +1,7 @@
 {
     "name": "cc-copilot-plugins",
     "metadata": {
-        "description": "Marketplace registry for Claude Code & GitHub Copilot workflow plugins",
+        "description": "Marketplace registry for Claude Code, GitHub Copilot & Codex workflow plugins",
         "version": "0.2.0"
     },
     "owner": {
@@ -12,7 +12,7 @@
         {
             "name": "cc-copilot-plugin",
             "source": "./plugins/cc-copilot-plugin",
-            "description": "Claude Code & GitHub Copilot plugin bundle for commit and pull request workflows"
+            "description": "Claude Code, GitHub Copilot & Codex plugin bundle for commit and pull request workflows"
         },
         {
             "name": "code-review",
