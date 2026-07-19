@@ -35,7 +35,7 @@
       "id": 6,
       "name": "preflight-blocks-on-dirty-tree",
       "prompt": "幫我建立 PR。（當下 git status --porcelain 輸出含未暫存檔案）",
-      "expected_output": "應停止建立 PR 流程並提示使用者先執行 `cc-copilot-plugin:commit-message` skill 完成提交，不得直接呼叫 `gh pr create`。"
+      "expected_output": "應停止建立 PR 流程並提示使用者先執行 `git-assistant:commit-message` skill 完成提交，不得直接呼叫 `gh pr create`。"
     },
     {
       "id": 7,

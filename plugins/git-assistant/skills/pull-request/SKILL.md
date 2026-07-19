@@ -36,7 +36,7 @@ graph TD
     C -- review/審查程式碼 --> OUT[導向獨立 review skill]
     C -- 無法識別 --> UND[輸出 undecidable + 詢問意圖]
 
-    PRE -- 有未提交變更 --> STOP[提示先執行 cc-copilot-plugin:commit-message]
+    PRE -- 有未提交變更 --> STOP[提示先執行 git-assistant:commit-message]
     PRE -- 乾淨 --> BASE[gh repo view 偵測 defaultBranchRef]
     BASE --> D[檢查當前分支 PR 狀態]
 
@@ -107,7 +107,7 @@ graph TD
 git status --porcelain
 ```
 
-- **輸出非空**：停止流程，提示使用者先執行 `cc-copilot-plugin:commit-message` skill 完成提交。
+- **輸出非空**：停止流程，提示使用者先執行 `git-assistant:commit-message` skill 完成提交。
 - **輸出為空**：繼續下一步。
 
 ### Step 2：偵測預設分支並同步

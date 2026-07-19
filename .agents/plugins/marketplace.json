@@ -5,11 +5,11 @@
     },
     "plugins": [
         {
-            "name": "cc-copilot-plugin",
+            "name": "git-assistant",
             "source": {
                 "source": "git-subdir",
                 "url": "https://github.com/gn00678465/coding-agent-toolkit.git",
-                "path": "./plugins/cc-copilot-plugin",
+                "path": "./plugins/git-assistant",
                 "ref": "main"
             },
             "policy": {

@@ -24,7 +24,7 @@ git status --porcelain
 ```
 
 - 輸出為空 → 工作區乾淨，可進入後續流程。
-- 輸出非空 → 停止流程，提示使用者先執行 `cc-copilot-plugin:commit-message` skill。
+- 輸出非空 → 停止流程，提示使用者先執行 `git-assistant:commit-message` skill。
 
 ---
 

@@ -6,7 +6,7 @@
 
 | 插件 | 版本 | 適用平台 | 說明 |
 |------|------|----------|------|
-| `cc-copilot-plugin` | 0.1.3 | Claude Code / Codex | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
+| `git-assistant` | 0.1.3 | Claude Code / Codex | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
 | `advisor` | 0.1.0 | Claude Code / Codex | 架構師模式 model-routing：session 跑在 Claude 最強模型上負責規格與驗證，實作路由給 Grok 4.5（Grok CLI）與 GPT-5.6 Sol（Codex），並提供承諾邊界 advisor |
 | `review-forge` | 0.1.0 | Claude Code / Codex / OpenCode | 多模型程式碼審查工作流：獨立審查 → 彙總去重 → 交叉投票 → 信心排序最終報告 → 核准修復 → 獨立驗證 |
 
@@ -22,7 +22,7 @@
 
 **option1**
 ```text
-/plugin install cc-copilot-plugin@coding-agent-toolkit
+/plugin install git-assistant@coding-agent-toolkit
 /plugin install advisor@coding-agent-toolkit
 /plugin install review-forge@coding-agent-toolkit
 /reload-plugins
@@ -33,7 +33,7 @@
 ```
 {
   "enabledPlugins": {
-    "cc-copilot-plugin@coding-agent-toolkit": true,
+    "git-assistant@coding-agent-toolkit": true,
     "advisor@coding-agent-toolkit": true,
     "review-forge@coding-agent-toolkit": true
   }
@@ -42,7 +42,7 @@
 
 安裝完成後可使用：
 
-- `cc-copilot-plugin`: `commit-message`、`pull-request`
+- `git-assistant`: `commit-message`、`pull-request`
 - `advisor`: `orchestration` skill 與 `claude-advisor`、`grok-implementer`、`codex-implementer` agents
 - `review-forge`: `review-forge` skill（`review` / `synthesize` / `vote` / `report` / `fix` / `verify` 六階段命令）
 
@@ -59,7 +59,7 @@ codex plugin marketplace add gn00678465/coding-agent-toolkit
 再依需求安裝插件：
 
 ```text
-codex plugin add cc-copilot-plugin@coding-agent-toolkit
+codex plugin add git-assistant@coding-agent-toolkit
 codex plugin add advisor@coding-agent-toolkit
 codex plugin add review-forge@coding-agent-toolkit
 ```
@@ -92,7 +92,7 @@ cp -r plugins/review-forge/skills/review-forge .opencode/skills/
 ## 目錄
 
 - [`plugins/advisor`](./plugins/advisor)
-- [`plugins/cc-copilot-plugin`](./plugins/cc-copilot-plugin)
+- [`plugins/git-assistant`](./plugins/git-assistant)
 - [`plugins/review-forge`](./plugins/review-forge)
 
 ## 參考
