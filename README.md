@@ -1,4 +1,4 @@
-# cc-copilot-plugins
+# coding-agent-toolkit
 
 本專案收錄多個可重用的 AI 編碼代理插件，支援 Claude Code、Codex 及 OpenCode 等平台。
 
@@ -6,7 +6,7 @@
 
 | 插件 | 版本 | 適用平台 | 說明 |
 |------|------|----------|------|
-| `cc-copilot-plugin` | 0.1.3 | Claude Code / Codex | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
+| `git-assistant` | 0.1.3 | Claude Code / Codex | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
 | `advisor` | 0.1.0 | Claude Code / Codex | 架構師模式 model-routing：session 跑在 Claude 最強模型上負責規格與驗證，實作路由給 Grok 4.5（Grok CLI）與 GPT-5.6 Sol（Codex），並提供承諾邊界 advisor |
 | `review-forge` | 0.1.0 | Claude Code / Codex / OpenCode | 多模型程式碼審查工作流：獨立審查 → 彙總去重 → 交叉投票 → 信心排序最終報告 → 核准修復 → 獨立驗證 |
 
@@ -15,16 +15,16 @@
 先加入 Marketplace 來源：
 
 ```text
-/plugin marketplace add gn00678465/cc-copilot-plugins
+/plugin marketplace add gn00678465/coding-agent-toolkit
 ```
 
 再依需求安裝插件：
 
 **option1**
 ```text
-/plugin install cc-copilot-plugin@cc-copilot-plugins
-/plugin install advisor@cc-copilot-plugins
-/plugin install review-forge@cc-copilot-plugins
+/plugin install git-assistant@coding-agent-toolkit
+/plugin install advisor@coding-agent-toolkit
+/plugin install review-forge@coding-agent-toolkit
 /reload-plugins
 ```
 
@@ -33,16 +33,16 @@
 ```
 {
   "enabledPlugins": {
-    "cc-copilot-plugin@cc-copilot-plugins": true,
-    "advisor@cc-copilot-plugins": true,
-    "review-forge@cc-copilot-plugins": true
+    "git-assistant@coding-agent-toolkit": true,
+    "advisor@coding-agent-toolkit": true,
+    "review-forge@coding-agent-toolkit": true
   }
 }
 ```
 
 安裝完成後可使用：
 
-- `cc-copilot-plugin`: `commit-message`、`pull-request`
+- `git-assistant`: `commit-message`、`pull-request`
 - `advisor`: `orchestration` skill 與 `claude-advisor`、`grok-implementer`、`codex-implementer` agents
 - `review-forge`: `review-forge` skill（`review` / `synthesize` / `vote` / `report` / `fix` / `verify` 六階段命令）
 
@@ -53,15 +53,15 @@
 先加入 Marketplace 來源：
 
 ```text
-codex plugin marketplace add gn00678465/cc-copilot-plugins
+codex plugin marketplace add gn00678465/coding-agent-toolkit
 ```
 
 再依需求安裝插件：
 
 ```text
-codex plugin add cc-copilot-plugin@cc-copilot-plugins
-codex plugin add advisor@cc-copilot-plugins
-codex plugin add review-forge@cc-copilot-plugins
+codex plugin add git-assistant@coding-agent-toolkit
+codex plugin add advisor@coding-agent-toolkit
+codex plugin add review-forge@coding-agent-toolkit
 ```
 
 每個 skill 目錄內含 `agents/openai.yaml` 提供 Codex UI 顯示名稱與預設 prompt。
@@ -72,13 +72,13 @@ codex plugin add review-forge@cc-copilot-plugins
 
 ```bash
 # 註冊 marketplace
-npx opencode-market add gn00678465/cc-copilot-plugins
+npx opencode-market add gn00678465/coding-agent-toolkit
 
 # 安裝到 .opencode/（OpenCode 專用）
-npx opencode-market install review-forge@cc-copilot-plugins --opencode
+npx opencode-market install review-forge@coding-agent-toolkit --opencode
 
 # 或安裝到 .agents/（跨平台共用）
-npx opencode-market install review-forge@cc-copilot-plugins --local
+npx opencode-market install review-forge@coding-agent-toolkit --local
 ```
 
 **方式二：手動複製 skill 目錄**
@@ -92,7 +92,7 @@ cp -r plugins/review-forge/skills/review-forge .opencode/skills/
 ## 目錄
 
 - [`plugins/advisor`](./plugins/advisor)
-- [`plugins/cc-copilot-plugin`](./plugins/cc-copilot-plugin)
+- [`plugins/git-assistant`](./plugins/git-assistant)
 - [`plugins/review-forge`](./plugins/review-forge)
 
 ## 參考

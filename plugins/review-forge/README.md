@@ -134,12 +134,12 @@ Status values remain stable English enums, while display labels may be localized
 
 ## Installation
 
-This skill ships as the `review-forge` plugin in the `cc-copilot-plugins`
+This skill ships as the `review-forge` plugin in the `coding-agent-toolkit`
 marketplace. In Claude Code:
 
 ```text
-/plugin marketplace add gn00678465/cc-copilot-plugins
-/plugin install review-forge@cc-copilot-plugins
+/plugin marketplace add gn00678465/coding-agent-toolkit
+/plugin install review-forge@coding-agent-toolkit
 ```
 
 For other clients that read cross-client Agent Skills, copy the skill folder

@@ -1,8 +1,8 @@
 {
-    "name": "cc-copilot-plugins",
+    "name": "coding-agent-toolkit",
     "metadata": {
         "description": "Marketplace registry for Claude Code & GitHub Copilot workflow plugins",
-        "version": "0.3.0"
+        "version": "0.4.0"
     },
     "owner": {
         "name": "gn00678465",
@@ -10,8 +10,8 @@
     },
     "plugins": [
         {
-            "name": "cc-copilot-plugin",
-            "source": "./plugins/cc-copilot-plugin",
+            "name": "git-assistant",
+            "source": "./plugins/git-assistant",
             "description": "Claude Code & GitHub Copilot plugin bundle for commit and pull request workflows"
         },
         {
