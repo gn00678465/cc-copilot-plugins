@@ -19,11 +19,11 @@
             "category": "Productivity"
         },
         {
-            "name": "code-review",
+            "name": "advisor",
             "source": {
                 "source": "git-subdir",
                 "url": "https://github.com/gn00678465/cc-copilot-plugins.git",
-                "path": "./plugins/code-review",
+                "path": "./plugins/advisor",
                 "ref": "main"
             },
             "policy": {

@@ -15,9 +15,9 @@
             "description": "Claude Code, GitHub Copilot & Codex plugin bundle for commit and pull request workflows"
         },
         {
-            "name": "code-review",
-            "source": "./plugins/code-review",
-            "description": "Professional code review loop plugin with automated reviewer relay"
+            "name": "advisor",
+            "source": "./plugins/advisor",
+            "description": "Architect-as-orchestrator: your session runs Claude's most capable model, routing implementation to Grok 4.5 (Grok CLI) and GPT-5.6 Sol at high reasoning (Codex) — with a commitment-boundary advisor"
         },
         {
             "name": "review-forge",

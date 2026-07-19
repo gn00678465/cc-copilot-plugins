@@ -7,7 +7,7 @@
 | 插件 | 版本 | 適用平台 | 說明 |
 |------|------|----------|------|
 | `cc-copilot-plugin` | 0.1.3 | Claude Code / Codex | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
-| `code-review` | 0.1.0 | Claude Code | 自動化多輪 code review loop，強制分離 writer / reviewer 角色，提供 `/code-review-loop`、`/continue-loop` 與 `/cancel-review` |
+| `advisor` | 1.0.0 | Claude Code / Codex | 架構師模式 model-routing：session 跑在 Claude 最強模型上負責規格與驗證，實作路由給 Grok 4.5（Grok CLI）與 GPT-5.6 Sol（Codex），並提供承諾邊界 advisor |
 | `review-forge` | 0.1.0 | Claude Code / Codex / OpenCode | 多模型程式碼審查工作流：獨立審查 → 彙總去重 → 交叉投票 → 信心排序最終報告 → 核准修復 → 獨立驗證 |
 
 ## Claude Code 安裝方式
@@ -23,7 +23,7 @@
 **option1**
 ```text
 /plugin install cc-copilot-plugin@cc-copilot-plugins
-/plugin install code-review@cc-copilot-plugins
+/plugin install advisor@cc-copilot-plugins
 /plugin install review-forge@cc-copilot-plugins
 /reload-plugins
 ```
@@ -34,7 +34,7 @@
 {
   "enabledPlugins": {
     "cc-copilot-plugin@cc-copilot-plugins": true,
-    "code-review@cc-copilot-plugins": true,
+    "advisor@cc-copilot-plugins": true,
     "review-forge@cc-copilot-plugins": true
   }
 }
@@ -43,10 +43,10 @@
 安裝完成後可使用：
 
 - `cc-copilot-plugin`: `commit-message`、`pull-request`
-- `code-review`: `/code-review-loop`、`/continue-loop`、`/cancel-review`
+- `advisor`: `orchestration` skill 與 `claude-advisor`、`grok-implementer`、`codex-implementer` agents
 - `review-forge`: `review-forge` skill（`review` / `synthesize` / `vote` / `report` / `fix` / `verify` 六階段命令）
 
-> `code-review` 另需先安裝 GitHub Copilot CLI，並確認 `copilot` 可於 `PATH` 中執行。
+> `advisor` 另需先安裝 [Grok CLI](https://x.ai/cli) 與 Codex CLI，並確認 `grok`、`codex` 可於 `PATH` 中執行。
 
 ## Codex 安裝方式
 
@@ -60,6 +60,7 @@ codex plugin marketplace add gn00678465/cc-copilot-plugins
 
 ```text
 codex plugin add cc-copilot-plugin@cc-copilot-plugins
+codex plugin add advisor@cc-copilot-plugins
 codex plugin add review-forge@cc-copilot-plugins
 ```
 
@@ -90,8 +91,8 @@ cp -r plugins/review-forge/skills/review-forge .opencode/skills/
 
 ## 目錄
 
+- [`plugins/advisor`](./plugins/advisor)
 - [`plugins/cc-copilot-plugin`](./plugins/cc-copilot-plugin)
-- [`plugins/code-review`](./plugins/code-review)
 - [`plugins/review-forge`](./plugins/review-forge)
 
 ## 參考
