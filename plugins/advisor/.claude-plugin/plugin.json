@@ -1,0 +1,21 @@
+{
+  "name": "advisor",
+  "version": "1.0.0",
+  "description": "Run your session on Claude's most capable model as a full-time architect: it writes specs and verdicts while Grok 4.5 (via the Grok CLI) and GPT-5.6 Sol at high reasoning (via Codex) do the typing. Fable-level judgment with cross-vendor implementation.",
+  "author": {
+    "name": "Madao",
+    "url": "https://github.com/gn00678465/advisor"
+  },
+  "homepage": "https://github.com/gn00678465/advisor",
+  "license": "MIT",
+  "keywords": [
+    "agents",
+    "model-routing",
+    "advisor",
+    "orchestration",
+    "architect",
+    "claude",
+    "grok",
+    "codex"
+  ]
+}

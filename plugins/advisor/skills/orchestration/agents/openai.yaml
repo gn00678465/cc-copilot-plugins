@@ -1,0 +1,7 @@
+interface:
+  display_name: "Orchestration"
+  short_description: "Architect-as-orchestrator: route implementation to Grok/Codex lanes, consult claude-advisor at commitment boundaries."
+  default_prompt: "Act as the architect: decompose the task, delegate implementation to the routine/cross-vendor lanes per the spec contract, and consult claude-advisor before committing to architecture decisions or declaring a multi-step deliverable done."
+
+policy:
+  allow_implicit_invocation: true

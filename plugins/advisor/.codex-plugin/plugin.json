@@ -1,0 +1,39 @@
+{
+  "name": "advisor",
+  "version": "1.0.0",
+  "description": "Run your session on Claude's most capable model as a full-time architect while Grok and Codex handle implementation.",
+  "author": {
+    "name": "Madao",
+    "url": "https://github.com/gn00678465/advisor"
+  },
+  "homepage": "https://github.com/gn00678465/advisor",
+  "repository": "https://github.com/gn00678465/advisor",
+  "license": "MIT",
+  "keywords": [
+    "agents",
+    "model-routing",
+    "advisor",
+    "orchestration",
+    "architect",
+    "claude",
+    "grok",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Advisor",
+    "shortDescription": "Architect-led orchestration across Claude, Grok, and Codex.",
+    "longDescription": "Advisor turns the primary session into an architect that owns requirements, specifications, delegation, and verification while routing implementation work to specialized model lanes.",
+    "developerName": "Madao",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Route this implementation through the advisor workflow.",
+      "Create an implementation spec and delegate the coding.",
+      "Review the implementation against the original requirements."
+    ]
+  }
+}
