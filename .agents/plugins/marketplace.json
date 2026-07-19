@@ -1,14 +1,14 @@
 {
-    "name": "cc-copilot-plugins",
+    "name": "coding-agent-toolkit",
     "interface": {
-        "displayName": "CC Copilot Plugins"
+        "displayName": "Coding Agent Toolkit"
     },
     "plugins": [
         {
             "name": "cc-copilot-plugin",
             "source": {
                 "source": "git-subdir",
-                "url": "https://github.com/gn00678465/cc-copilot-plugins.git",
+                "url": "https://github.com/gn00678465/coding-agent-toolkit.git",
                 "path": "./plugins/cc-copilot-plugin",
                 "ref": "main"
             },
@@ -22,7 +22,7 @@
             "name": "advisor",
             "source": {
                 "source": "git-subdir",
-                "url": "https://github.com/gn00678465/cc-copilot-plugins.git",
+                "url": "https://github.com/gn00678465/coding-agent-toolkit.git",
                 "path": "./plugins/advisor",
                 "ref": "main"
             },
@@ -36,7 +36,7 @@
             "name": "review-forge",
             "source": {
                 "source": "git-subdir",
-                "url": "https://github.com/gn00678465/cc-copilot-plugins.git",
+                "url": "https://github.com/gn00678465/coding-agent-toolkit.git",
                 "path": "./plugins/review-forge",
                 "ref": "main"
             },

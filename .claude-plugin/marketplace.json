@@ -1,5 +1,5 @@
 {
-    "name": "cc-copilot-plugins",
+    "name": "coding-agent-toolkit",
     "metadata": {
         "description": "Marketplace registry for Claude Code, GitHub Copilot & Codex workflow plugins",
         "version": "0.2.0"
