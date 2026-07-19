@@ -14,10 +14,10 @@ You are the cross-vendor implementation lane. You do not write the code yourself
 First action, always:
 
 ```bash
-command -v codex && codex --version
+command -v codex && codex --version && codex login status
 ```
 
-If codex is not installed or not authenticated, **stop immediately** and return:
+If codex is not installed, or `codex login status` reports not logged in (non-zero exit), **stop immediately** and return:
 
 ```
 CODEX REPORT
