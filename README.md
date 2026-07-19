@@ -7,7 +7,7 @@
 | 插件 | 版本 | 適用平台 | 說明 |
 |------|------|----------|------|
 | `cc-copilot-plugin` | 0.1.3 | Claude Code / Codex | Commit / PR 工作流插件，包含 `commit-message`、`pull-request` 等技能 |
-| `advisor` | 1.0.0 | Claude Code / Codex | 架構師模式 model-routing：session 跑在 Claude 最強模型上負責規格與驗證，實作路由給 Grok 4.5（Grok CLI）與 GPT-5.6 Sol（Codex），並提供承諾邊界 advisor |
+| `advisor` | 0.1.0 | Claude Code / Codex | 架構師模式 model-routing：session 跑在 Claude 最強模型上負責規格與驗證，實作路由給 Grok 4.5（Grok CLI）與 GPT-5.6 Sol（Codex），並提供承諾邊界 advisor |
 | `review-forge` | 0.1.0 | Claude Code / Codex / OpenCode | 多模型程式碼審查工作流：獨立審查 → 彙總去重 → 交叉投票 → 信心排序最終報告 → 核准修復 → 獨立驗證 |
 
 ## Claude Code 安裝方式
