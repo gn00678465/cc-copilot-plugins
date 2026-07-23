@@ -13,7 +13,8 @@
 // reads the "status" field rather than the process exit code:
 //   {"status":"complete","outputFile":"...","modelUsed":"claude-fable-5","degraded":false}
 //   {"status":"complete","outputFile":"...","modelUsed":"claude-opus-4-8","degraded":true}
-//   {"status":"timeout","outputFile":null}
+//   {"status":"timeout","outputFile":null}                        // this script's own deadline
+//   {"status":"invocation_error","reason":"claude exited 1: ..."} // claude ran and failed
 //   {"status":"unavailable","reason":"claude CLI not found on PATH"}
 //
 // This script only dispatches and captures — it does not read the diff, does
@@ -70,6 +71,7 @@ try {
 const outputFile = path.join(os.tmpdir(), `claude-advisor-final-${process.pid}-${Date.now()}.txt`);
 
 let stdout;
+const startedAt = Date.now();
 try {
   stdout = execFileSync(
     "claude",
@@ -91,12 +93,21 @@ try {
     { timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER, encoding: "utf8" }
   );
 } catch (err) {
+  // Attribution matters: a caller triaging a dead lane needs to know WHICH
+  // failure happened, not a collapsed catch-all. "timeout" is reserved for
+  // this script's own deadline; an externally-delivered signal or a non-zero
+  // exit is an invocation_error.
   if (err.code === "ENOENT") {
     emit({ status: "unavailable", reason: "claude CLI not found on PATH" });
-  } else if (err.killed || err.signal) {
+  } else if ((err.killed || err.signal) && Date.now() - startedAt >= TIMEOUT_MS) {
     emit({ status: "timeout", outputFile: null });
+  } else if (err.killed || err.signal) {
+    emit({ status: "invocation_error", reason: `terminated by signal ${err.signal || "unknown"}` });
   } else {
-    emit({ status: "unavailable", reason: err.message });
+    emit({
+      status: "invocation_error",
+      reason: `claude exited ${err.status ?? "abnormally"}: ${(err.stderr || err.message || "").toString().slice(-500).trim()}`,
+    });
   }
   process.exit(0);
 }

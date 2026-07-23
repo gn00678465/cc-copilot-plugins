@@ -74,8 +74,14 @@ class Report:
     suggested_branches: list[str]
 
 
-def run_git(args: list[str]) -> str:
-    """執行 git 指令並回傳 stdout。git 不存在或非零 exit 時，往 stderr 輸出錯誤並 sys.exit(1)。"""
+def run_git(args: list[str], *, strip: bool = True) -> str:
+    """執行 git 指令並回傳 stdout。git 不存在或非零 exit 時，往 stderr 輸出錯誤並 sys.exit(1)。
+
+    `strip=False` 供位置敏感的輸出格式使用（如 `status --porcelain -z`）：
+    porcelain 第一個 entry 若為 unstaged 變更（X 欄是空格，如 ` D path`），
+    `.strip()` 會吃掉開頭空格，使 X/Y 欄位整體左移——unstaged 項目被誤判為
+    staged，且路徑首字元被切掉。
+    """
     try:
         result = subprocess.run(
             ["git", *args],
@@ -93,7 +99,7 @@ def run_git(args: list[str]) -> str:
         print(f"Error: {stderr}", file=sys.stderr)
         sys.exit(1)
 
-    return result.stdout.strip()
+    return result.stdout.strip() if strip else result.stdout
 
 
 def parse_file_statuses() -> StagedFiles:
@@ -103,7 +109,7 @@ def parse_file_statuses() -> StagedFiles:
     -z 採用 NUL 分隔，檔名可安全包含空白與特殊字元。
     X = staging 狀態；Y = 工作目錄狀態。本函式只讀取 X 欄位。
     """
-    raw = run_git(["status", "--porcelain=v1", "-z"])
+    raw = run_git(["status", "--porcelain=v1", "-z"], strip=False)
     new_files: list[str] = []
     modified_files: list[str] = []
     deleted_files: list[str] = []
