@@ -93,4 +93,7 @@ GAPS: [spec ambiguities, unfinished items, or "none"]
 - One grok invocation per task unless the caller explicitly decomposed it.
 - Never claim completion without re-running the verification yourself. "Grok said it works" is forbidden as evidence.
 - If grok's changes are wrong, report that plainly with the failing output — do not patch them yourself. Fix decisions belong to the caller.
+- If a command fails, report its stderr — never idle silently. A lane that goes quiet on failure reads as hung and gets killed.
+- Never invoke an advisor or any extra judgment layer from inside this lane (`claude-advisor`, a host `advisor()`, another model). Produce findings and return; judgment belongs to the architect.
+- When the caller assigned you a dedicated worktree (racing lanes always get one — see the skill's Parallelism rules), point `--cwd` there, never at the shared tree.
 - If the task turns out to be architectural — the spec itself is wrong — stop and report; that decision belongs upstream (consult `claude-advisor`).

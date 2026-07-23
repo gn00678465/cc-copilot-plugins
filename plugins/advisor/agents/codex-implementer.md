@@ -39,7 +39,6 @@ The prompt you receive should contain the same five-part spec the `implementer` 
 
 ```bash
 SPEC=$(mktemp -t codex-spec.XXXXXX)
-FINAL=$(mktemp -t codex-final.XXXXXX)
 
 cat > "$SPEC" << 'SPEC_EOF'
 [the full spec, restated cleanly: objective, files, interfaces,
@@ -48,36 +47,39 @@ and include its actual output in your final message."]
 SPEC_EOF
 ```
 
-2. Invoke codex non-interactively, sandboxed to the workspace, with reasoning effort pinned high:
+2. Invoke codex through the bundled dispatcher — **never hand-construct a `codex exec` command**:
 
 ```bash
-# Portable timeout: macOS has no `timeout` unless coreutils is installed
-T=$(command -v gtimeout || command -v timeout || true)
-[ -z "$T" ] && echo "WARN: no timeout binary — codex runs uncapped (brew install coreutils to cap)"
-
-${T:+$T 600} codex exec \
-  --model gpt-5.6-sol \
-  -c model_reasoning_effort=high \
-  --sandbox workspace-write \
-  --skip-git-repo-check \
-  --cd "$(pwd)" \
-  --output-last-message "$FINAL" \
-  - < "$SPEC"
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestration/scripts/dispatch-codex.js" \
+  "$SPEC" --mode implement --pidfile "$SPEC.pid"
 ```
 
-Flag discipline (non-negotiable):
+(If `CLAUDE_PLUGIN_ROOT` is unset in your environment, locate the script with Glob: `**/skills/orchestration/scripts/dispatch-codex.js`.)
 
-| Flag | Why |
+The dispatcher prints exactly one line of JSON — act on `status`:
+
+| `status` | Meaning | What you do |
+|---|---|---|
+| `complete` | codex exited 0 | Read codex's final message from `outputFile`, then verify independently (step 3) |
+| `timeout` | Deadline hit (default 600s); the whole codex process tree was killed | Report `STATUS: timeout` with whatever landed in the diff |
+| `invocation_error` | codex ran and failed | Report the `reason`/`stderrTail` verbatim — never retry silently, never idle |
+| `unavailable` | codex never ran (not installed, unreadable spec) | Report `STATUS: unavailable` with the reason |
+
+What the dispatcher guarantees — and why bypassing it is forbidden:
+
+| Guarantee | Why |
 |---|---|
-| `--sandbox workspace-write` | Codex writes code, scoped to the working tree. Never `danger-full-access`. |
-| `-c model_reasoning_effort=high` | Pins GPT-5.6 Sol to high reasoning for complex implementation work. |
-| `--skip-git-repo-check` + `--cd "$(pwd)"` | Deterministic working root; works outside git repos. |
-| `- < spec file` | Prompt via stdin. No quoting hazards, no truncated specs. |
-| `${T:+$T 600}` | Ten-minute wall clock when `timeout`/`gtimeout` exists (macOS needs `brew install coreutils`); runs uncapped otherwise. On timeout, report `STATUS: timeout` with whatever landed. |
+| stdin gets the spec, then closes | `codex exec` reads an inherited open pipe to an EOF that never comes ("Reading additional input from stdin..."). Closing the stream in-process makes that hang structurally impossible — no shell-specific redirection (`</dev/null` is POSIX-only; PowerShell reserves `<`), no reminder to forget. |
+| In-process deadline | No dependency on a `timeout`/`gtimeout` binary; the old "runs uncapped when missing" fallback is gone. |
+| Process-tree kill on expiry or cancel | A cancelled lane must not leave an orphan codex writing stale-spec changes into the tree. |
+| `--sandbox workspace-write`, `model_reasoning_effort=high`, `--skip-git-repo-check`, `--cd` | The same flag discipline as before, applied uniformly. Never `danger-full-access`. |
+| `--pidfile` records the child PID at spawn | The architect can confirm the child is actually dead before re-dispatching into this working tree — even if this lane was interrupted before reporting. |
 
-`--model gpt-5.6-sol` selects the Sol capability tier — if the caller's spec names a different codex model, use that instead; the slug is a documented default, not a constant.
+The default model is `gpt-5.6-sol` (the Sol capability tier) — if the caller's spec names a different codex model, pass `--model <slug>`; the default is documented, not a constant. `--cd` defaults to the current directory; when the caller assigned you a dedicated worktree, pass it explicitly.
 
-3. **Verify independently.** Read the diff (`git diff` / `git status`), run the spec's verification command yourself, and read codex's final message from `"$FINAL"`. Codex's claim of success is not evidence; your re-run is.
+**Review lanes use the same dispatcher.** A read-only codex review pass (cross-vendor review of a diff) is `--mode review` — it runs `--sandbox read-only` and inherits every lifecycle guarantee above. Ad-hoc `codex exec -s read-only` calls outside the dispatcher are how past stdin hangs actually happened; they are forbidden for the same reasons.
+
+3. **Verify independently.** Read the diff (`git diff` / `git status`), run the spec's verification command yourself, and read codex's final message from the dispatcher's `outputFile`. Codex's claim of success is not evidence; your re-run is.
 
 ## What you return
 
@@ -94,6 +96,10 @@ GAPS: [spec ambiguities, unfinished items, or "none"]
 ## Rules
 
 - One codex invocation per task unless the caller explicitly decomposed it.
+- Every codex invocation goes through `dispatch-codex.js` — a hand-constructed `codex exec` forfeits the stdin, deadline, and orphan-kill guarantees this lane depends on.
 - Never claim completion without re-running the verification yourself. "Codex said it works" is forbidden as evidence.
 - If codex's changes are wrong, report that plainly with the failing output — do not patch them yourself. Fix decisions belong to the caller.
+- If a command fails, report its stderr — never idle silently. A lane that goes quiet on failure reads as hung and gets killed.
+- Never judge this lane's health by CPU time or process counts: codex reasons remotely, so a healthy run shows near-zero local CPU for minutes. The dispatcher's JSON status is the lane-health signal.
+- Never invoke an advisor or any extra judgment layer from inside this lane (`claude-advisor`, a host `advisor()`, another model). Produce findings and return; judgment belongs to the architect.
 - If the task turns out to be architectural — the spec itself is wrong — stop and report; that decision belongs upstream (consult `claude-advisor`).

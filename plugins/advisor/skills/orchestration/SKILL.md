@@ -34,13 +34,17 @@ Grok vs codex is not a capability ranking — it's a failure-distribution questi
 
 If a lane returns `unavailable` or `timeout`, re-route the same spec to the other lane and say so explicitly in your report — never quietly absorb the substitution. If both CLI lanes are unavailable, implement with a Claude subagent and state the downgrade plainly.
 
+**Lanes produce; the architect judges.** An implementer or review lane never invokes an advisor or any extra judgment layer of its own (`claude-advisor`, a host `advisor()`, another model) — it returns findings and unresolved questions upstream, where routing and verdicts live. The shipped lane definitions enforce this structurally by omitting agent-dispatch tools from their `tools:` frontmatter; a custom lane that wants to follow this doctrine must do the same — the tool list, not a reminder, is what makes the rule hold.
+
 ### Dispatching lanes outside Claude Code
 
 `agents/*.md` are Claude Code subagent definitions — only Claude Code's Agent tool can load them. When the session itself is hosted inside a different CLI (Codex, Grok, or any shell that isn't Claude Code), none of the three lanes are reachable that way.
 
-For `claude-advisor`, this skill ships `node "${CLAUDE_SKILL_DIR}/scripts/dispatch-claude-advisor.js" <briefFile> [model] [fallbackModel]` — worth a dedicated script because loading the advisor's persona onto a bare `claude -p` subprocess (system-prompt injection, model-fallback detection) is a real mechanical problem, not something to reconstruct per call. It takes the already-written consult brief as its first argument and prints exactly **one line of JSON**: `{"status": "complete"|"timeout"|"unavailable", "outputFile": "<path or null>", "modelUsed": "...", "degraded": true|false}`. It never reads the diff, never re-runs verification, and never writes a narrative report — that judgment stays with whichever model is running the architect turn, on `outputFile`'s contents, exactly as it would after an Agent-tool dispatch.
+For `claude-advisor`, this skill ships `node "${CLAUDE_SKILL_DIR}/scripts/dispatch-claude-advisor.js" <briefFile> [model] [fallbackModel]` — worth a dedicated script because loading the advisor's persona onto a bare `claude -p` subprocess (system-prompt injection, model-fallback detection) is a real mechanical problem, not something to reconstruct per call. It takes the already-written consult brief as its first argument and prints exactly **one line of JSON**: `{"status": "complete"|"timeout"|"invocation_error"|"unavailable", "outputFile": "<path or null>", "modelUsed": "...", "degraded": true|false}`. It never reads the diff, never re-runs verification, and never writes a narrative report — that judgment stays with whichever model is running the architect turn, on `outputFile`'s contents, exactly as it would after an Agent-tool dispatch.
 
-For `grok-implementer` and `codex-implementer`, there is no dispatch script — the spec contract already fully determines what to tell the CLI (the spec text *is* the prompt, no persona to load), so the architect on a non-Claude-Code host constructs the invocation directly from the recipe already documented in `agents/grok-implementer.md`/`agents/codex-implementer.md` (preflight check, exact CLI flags, timeout handling). Read the matching agent file for the command.
+For `codex-implementer` — and any read-only codex review pass — this skill ships `node "${CLAUDE_SKILL_DIR}/scripts/dispatch-codex.js" <specFile> [--mode implement|review] [--model <slug>] [--timeout <seconds>] [--cd <dir>] [--pidfile <path>]`. The spec text *is* the whole prompt, but the process lifecycle is not simple: the script owns what per-call reminders have demonstrably failed to own — it writes the spec to codex's stdin and closes the stream (an inherited open pipe makes `codex exec` wait forever for EOF), enforces the deadline in-process (no `timeout` binary dependency, no uncapped fallback), kills the whole process tree on expiry or cancellation, and records the child PID at spawn so a re-dispatch can verify the previous run is dead. **All `codex exec` invocations go through it, on every host** — hand-constructed calls are forbidden. It prints exactly one line of JSON: `{"status": "complete"|"timeout"|"invocation_error"|"unavailable", "outputFile": ..., "pid": ..., ...}` — `timeout` always means the script enforced its deadline; `invocation_error` always means codex itself failed. Read the status field, never infer.
+
+For `grok-implementer`, there is no dispatch script — `grok --prompt-file` reads the spec from a file (no stdin hazard), so the architect on a non-Claude-Code host constructs the invocation directly from the recipe documented in `agents/grok-implementer.md` (preflight check, exact CLI flags, timeout handling).
 
 ### Invoking claude-advisor
 
@@ -77,6 +81,7 @@ Implementers share none of your conversation context. Every delegation prompt ca
 3. **Interfaces** — signatures, types, or API shapes the code must match
 4. **Constraints** — project conventions, things not to touch
 5. **Verification** — the command(s) that prove it works
+6. **Known risks** *(conditional)* — required whenever the touched behavior includes a component class with a well-known defect taxonomy: drag-and-drop (enter/leave pairing, multi-instance isolation, mid-drag data changes, post-drop residue), virtualized lists, form state, async caches. Name the applicable invariants and give Verification at least one check for each. Front-loading these is one spec section; discovering them is a full implement→verify→review round apiece. List only risks the changed behavior actually implicates — never a pasted universal checklist.
 
 Exclude secrets, credentials, and proprietary-sensitive content from what gets sent: `grok-implementer` and `codex-implementer` are third-party CLIs, and anything placed in a spec's Files/Interfaces/Constraints flows to them verbatim. If a file can't be shared with an external vendor, redact the sensitive part or keep that piece of work with the architect instead of delegating it.
 
@@ -85,6 +90,12 @@ A spec you can't finish writing is a signal the decision isn't made yet — that
 ## Parallelism
 
 Independent specs (no shared files, no ordering dependency) launch as parallel agents in a single message. Sequential chains and single-file surgery stay serial. For high-stakes work, a pick-the-stronger-diff race — `grok-implementer` and `codex-implementer` on the same spec, architect judges — buys three-vendor confidence for one extra lane's cost.
+
+**One writer per working tree.** A race on the same spec means the same target files, so each racing lane gets its own checkout — `git worktree add <dir>` from a recorded clean HEAD, with the lane's `--cd`/`--cwd` pointed there — never the shared tree. The architect applies only the winning lane's diff to the target branch; the loser's worktree is discarded whole.
+
+**Cancel is not dead.** Stopping a lane stops the agent wrapper — it does not guarantee the CLI subprocess it spawned (`codex exec`, `grok`) has exited; an orphan can keep writing stale-spec changes into the tree long after the cancel. Before re-dispatching into the same tree: (1) confirm the previous child is gone — the codex dispatcher's `--pidfile` records the PID at spawn (POSIX: `kill -0 <pid>`; Windows: `Get-Process -Id <pid>`); (2) compare `git status` / `git diff --stat` against a pre-cancel snapshot to confirm nothing moved while you waited; (3) prefer a fresh worktree for the replacement regardless. A superseded run's output is never merged, even if it looks plausible.
+
+**Failure triage before corrective action.** When a lane looks hung or failed, establish attribution before killing or re-dispatching, in this order: (1) your own dispatch instruction — shell compatibility first (`</dev/null` is POSIX-only; PowerShell reserves `<` and fails to parse it), then paths and quoting; (2) the lane's execution; (3) the tool itself. Skip the triage only for an explicit auth error, a missing executable, or a deadline the dispatcher already enforced. Long wall time with near-zero CPU is **not** a hang signal — codex reasons remotely, so an idle-looking local process is normal; a healthy run has been killed on exactly that misreading. Trust the dispatcher's status line and output-file progress, never CPU or process counts.
 
 ## Commitment boundaries
 
@@ -148,5 +159,11 @@ Before declaring a multi-step deliverable done: if `claude-advisor` was consulte
 ## Verification
 
 Reports are claims, not evidence. Before accepting any lane's work: read the diff, and **re-run the verification command yourself**. Source inspection or the lane's quoted output is not a substitute. If re-running is impossible, mark verification incomplete and state why — do not accept the task as done. "Should work", "tests should pass", or a report with no command output means the task is not done. A lane that reports a spec gap gets a corrected spec, not a "use your judgment".
+
+Calibrate the claim to the evidence: a single diff read supports "no problems found in <scope>", not "confirmed correct" — reserve the latter for a named property a deterministic check actually established. Over-claiming gets overturned by the next review round and erodes trust in every verification statement after it.
+
+**Convergence gates acceptance.** Enumerate the review stages a deliverable requires at dispatch time (e.g. lane self-check, then an independent cross-vendor re-check). While any declared stage is pending, every verdict is provisional — do not merge, release, or create the final acceptance commit. A checkpoint commit is fine, but its message must say `review not converged`, and it is never promoted to accepted silently. The independent second stage exists precisely because it catches what the first stage and the architect's own diff read jointly miss.
+
+**Cleanup is surgical.** When resetting a lane's output, delete by explicit path, or use `git stash -u`. Never `git clean -fdx` a shared tree: `-d` recurses into untracked directories, deleting unlisted work (`.claude/`, `.agents/`) that no `.gitignore` rule protects — unrecoverably.
 
 Consultations use the three gates under **Consult verification** above — not shell commands.
